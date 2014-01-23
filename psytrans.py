@@ -6,16 +6,6 @@ import logging
 import sys
 
 
-def parseFasta(path):
-    seqs = {}
-    logging.debug("Loading fasta files from %s" % path)
-    if path.endswith('.gz'):
-        handle = gzip.open(path)
-    else:
-        handle = open(path)
-    handle.close()
-    return seqs
-
 def iterFasta(path):
     logging.debug("Loading fasta files from %s" % path)
     if path.endswith('.gz'):
