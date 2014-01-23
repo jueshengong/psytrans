@@ -13,6 +13,9 @@ def iterFasta(path):
     else:
         handle = open(path):
     for line in handle:
+	line = line.strip()
+        if not line:
+            continue
         # etc etc
         # now a sequence is loaded with name and seq
         yield name, seq
