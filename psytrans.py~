@@ -5,30 +5,48 @@ import gzip
 import logging
 import sys
 
+HOST_NAME = "Coral"
+SYMB_NAME = "Zoox"
+HOST_CODE = 0
+SYMB_CODE = 1
+
 
 def iterFasta(path):
+    name, seq = None, []
     logging.debug("Loading fasta files from %s" % path)
     if path.endswith('.gz'):
         handle = gzip.open(path)
     else:
-        handle = open(path):
+        handle = open(path)
     for line in handle:
-	line = line.strip()
-        if not line:
-            continue
-        # etc etc
+        i = 1
+	    line = line.strip()
+            if not line:
+                continue
+        if line[0] == ">":
+            if name:
+                yield (name, seq)
+            name = line.append('>' + species + '_' + str(i))
+            seq = ""
+            i += 1
+        else:
+            seq += line[:-1]
+         
         # now a sequence is loaded with name and seq
-        yield name, seq
+        yield (name, seq)
     handle.close()
     
-def myFunction():
+def writingToFasta(name, seq, host, symb):
+    targetDatabase = open(target_db.fasta, 'w')
     for name, seq in iterFasta(path):
-        simthingWithSeq(name, seq, this, that)
+    targetDatabase.write(name + seq + '\n')    
 
 def renameSeq(args):
     logging.info("Relabelling sequences")
-    host = args.hostSeq
-    symb = args.symbSeq
+    hostName = HOST_NAME
+    symbName = SYMB_NAME
+    hostPath = args.hostSeq
+    symbPath = args.symbSeq
     hostSeqs = parseFasta(args.thisOrThat)
     a = 1
     return a
