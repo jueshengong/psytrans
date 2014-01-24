@@ -3,69 +3,56 @@
 import argparse
 import gzip
 import logging
+import os.path
 import sys
 
-HOST_NAME = "Coral"
-SYMB_NAME = "Zoox"
-HOST_CODE = 0
-SYMB_CODE = 1
+HOST_NAME = "host"
+SYMB_NAME = "symb"
+DB_NAME   = "HostSymbDB"
+DB_FASTA  = DB_NAME + '.fasta'
+HOST_CODE = 1
+SYMB_CODE = 2
 
 
-def renameSeq(args):
-    logging.info("Relabelling sequences")
-    hostName = HOST_NAME
-    symbName = SYMB_NAME
-    hostPath = args.hostSeq
-    symbPath = args.symbSeq
-    return hostName, symbName, hostPath, symbPath
+
 
 
 def iterFasta(path):
-    name, seq = None, []
     logging.debug("Loading fasta files from %s" % path)
+    name = None
+    seq = [] 
     if path.endswith('.gz'):
         handle = gzip.open(path)
     else:
         handle = open(path)
     for line in handle:
-        i = 1
-	    line = line.strip()
-            if not line:
-                continue
-        if line[0] == ">":
-            if name:
-                yield (name, seq)
-            name = line.append('>' + species + '_' + str(i))
-            seq = ""
-            i += 1
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith(">"):
+            if name: 
+                yield (name, ''.join(seq))
+            name = line                 
+            seq = []
         else:
-            seq += line[:-1]
-         
-        # now a sequence is loaded with name and seq
-        yield (name, seq)
-    handle.close()
+            seq.append(line)    
+    if name:
+        yield (name, ''.join(seq))
  
     
-def writeDatabase(host, symb):    
-    logging.debug("Constructing database")
-    targetpath = open('target_db.fasta', 'w')
+def writeDatabase(args):    
+    hPath = args.hostSeq
+    sPath = args.symbSeq
+    targetpath = open(os.path.join(args.TempDir, DB_FASTA), 'w')
     #Writing Host Sequences to target database
-    hPath = host
-    i=0
-    for name, seq in iterFasta(hPath):
-        i += 1
-        name = '>'+ hostName +'_'+str(i)
-        targetpath.write(name + "\n")
-        targetpath.write(seq + "\n") 
-    #Writing Symbiont Sequences to target database
-    sPath = symb
-    j=0
-    for name, seq in iterFasta(sPath):
-        j += 1
-        name = '>'+ symbName +'_'+str(j)
-        targetpath.write(name + "\n")
-        targetpath.write(seq + "\n") 
-    targetpath.close()   
+    for x in hPath,sPath:
+        i = 0
+        for name, seq in iterFasta(x):
+            i += 1
+            name = '>' + HOST_NAME +'_'+str(i)
+            targetpath.write(name + "\n")
+            targetpath.write(seq + "\n") 
+    targetpath.close()
     logging.debug('Database has been created. Preparing for Blast..')
     
     
@@ -75,7 +62,7 @@ def runBlast():
     logging.debug('Blast finished')
     
 def parseBlastAndPrepareSets(args):
-    if args.blastResults != '-':
+    if args.blastResults:
        logging.debug('Blast Results obtained. Converting..')
     logging.info('Parsing Blast Results')
     logging.info('Prepare Training Sets')
@@ -91,6 +78,13 @@ def svmRun():
 
 def predictClass():
     logging.info('Predicting and Classifying Sequences')
+
+def tempPathCheck(args):
+    logging.info('Checking for temporary file folder')
+    tempFolder = os.path.abspath(args.TempDir) 
+    if not os.path.isdir(tempFolder):
+        os.makedirs(tempFolder)
+
 
 def mainArgs():
     parser = argparse.ArgumentParser(description='Performs SVM CLassification of Host-Symbiont Sequences')
@@ -145,6 +139,11 @@ def mainArgs():
                         type = bool,
                         default = True,
                         help = 'Turn Verbose mode on?')
+    parser.add_argument('-t',
+                        '--TempDir',
+                        type = str,
+                        default = 'Temp',
+                        help = 'Name of temporary directory')
     parser.add_argument('-X',
                         '--clearTemp',
                         type = bool,
@@ -163,12 +162,11 @@ def main():
        sys.exit()
     if args.verboseMode:
        logging.basicConfig(level=logging.DEBUG, format=("%(asctime)s - %(message)s"))
+    tempPathCheck(args)
     logging.info("Arguments parsed. Starting...")
 
-    #Step 1
-    renameSeq(args)
     #Step 2
-    writeDatabase(hostPath, symbPath)
+    writeDatabase(args)
     #Step 3
     runBlast()
     #Step 4
