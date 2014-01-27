@@ -15,8 +15,6 @@ SYMB_CODE = 2
 
 
 
-
-
 def iterFasta(path):
     logging.debug("Loading fasta files from %s" % path)
     name = None
@@ -57,11 +55,13 @@ def writeDatabase(args):
     
     
 def runBlast():
+    ##Need to read Sub-process
     logging.info('Performing Blast Search')
     logging.debug('Blast started')
     logging.debug('Blast finished')
     
 def parseBlastAndPrepareSets(args):
+    ###Rewrite function to use iterFasta 
     if args.blastResults:
        logging.debug('Blast Results obtained. Converting..')
     logging.info('Parsing Blast Results')
@@ -85,7 +85,6 @@ def tempPathCheck(args):
     if not os.path.isdir(tempFolder):
         os.makedirs(tempFolder)
 
-
 def mainArgs():
     parser = argparse.ArgumentParser(description='Performs SVM CLassification of Host-Symbiont Sequences')
     parser.add_argument('queries',
@@ -98,11 +97,11 @@ def mainArgs():
     parser.add_argument('-H',
                         '--hostSeq',
                         type=str,
-                        help= 'The input host sequences (single species)')
+                        help='The input host sequences (single species)')
     parser.add_argument('-S',
                         '--symbSeq',
                         type=str,
-                        help = 'The input symbiont sequences (single species)')
+                        help='The input symbiont sequences (single species)')
     
     parser.add_argument('-b',
                         '--blastResults',
@@ -122,18 +121,18 @@ def mainArgs():
     parser.add_argument('-n',
                         '--numberOfSeq',
                         type=int,
-                        default = '1000',
+                        default='1000',
                         help='Maximum number of training & testing sequences')
     parser.add_argument('-c',
                         '--minWordSize',
-                        type = int,
-                        default = '1',
-                        help = 'Minimum value of DNA word length')
+                        type=int,
+                        default='1',
+                        help='Minimum value of DNA word length')
     parser.add_argument('-k',
                         '--maxWordSize',
-                        type = float,
-                        default = '4',
-                        help = 'Maxmimum value of DNA word length')
+                        type=float,
+                        default='4',
+                        help='Maxmimum value of DNA word length')
     parser.add_argument('-v',
                         '--verboseMode',
                         type = bool,
@@ -142,13 +141,13 @@ def mainArgs():
     parser.add_argument('-t',
                         '--TempDir',
                         type = str,
-                        default = 'Temp',
-                        help = 'Name of temporary directory')
+                        default='Temp',
+                        help='Name of temporary directory')
     parser.add_argument('-X',
                         '--clearTemp',
-                        type = bool,
-                        default = False,
-                        help = 'Clear all temporary data upon completion?')
+                        type=bool,
+                        default=False,
+                        help='Clear all temporary data upon completion?')
     args = parser.parse_args()
     return args
 
