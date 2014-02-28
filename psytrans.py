@@ -29,21 +29,105 @@ HOST_TRAINING = HOST_NAME + '_training.fasta'
 HOST_TESTING  = HOST_NAME + '_testing.fasta'
 SYMB_TRAINING = SYMB_NAME + '_training.fasta'
 SYMB_TESTING  = SYMB_NAME + '_testing.fasta'
+LIBSVM_DIR    = 'libsvm'
 
 LETTERS = ('A', 'T', 'G', 'C')
 
 ###TODO  Read about classes first#####
 class PsyTransOptions:
+""" this class consists of attributes to allow database and file paths to be obtained conveniently. 
+	Attributes are referred from args, and written to write filenames, filepaths, naming conventions."""
+	def __init__(self, args):
+		self.args              = args 
+		self.dbPath            = None
+		self.fastaDbPath       = None
+		self.blastResultsPath  = None
+		self.blastInternalPath = None
+		self.suffix            = None
+		self.inputFile         = None
+		self.trainFile         = None
+		self.testFile          = None
 
-    def __init__(self, args):
-        self.args = args # or copy the arguments one by one
-        
-        self.blastDBPath = None
-        
-    def getBlastDBPath(self):
-        if not self.blastDBPath:
-            self.blastDBPath = os.path.join('XXX', 'YYY')
-        return self.blastDBPath
+	def getDbPath(self):
+	"""returns the file path to the blast database"""
+		if not self.dbPath:
+			self.dbPath = os.path.join(self.args.tempDir, DB_NAME)
+		return self.dbPath
+		
+	def getFastaDbPath(self):
+	"""returns the fasta file path of the blast database"""
+		if not self.fastaDbPath:
+			self.fastaDbPath = os.path.join(self.args.tempDir, DB_FASTA) 
+		return self.fastaDbPath
+		
+	def isBlastGiven(self):
+	"""check if any blast results are being provided by the user"""
+		self.blastPath = self.args.blastResults
+		if self.blastPath:
+			return True
+		else:
+			return False	
+		    
+	def getBlastResultsPath(self): 
+	"""to obtain the path to the user's Blast Result"""
+		cwd = os.getcwd()
+		if not self.blastResultsPath:
+			self.blastResultsPath = os.path.join(cwd, str(self.args.blastResults))
+		return self.blastResultsPath
+	
+	def getBlastInternalPath(self):
+	"""to obtain the path to the Blast Result internally obtained by the script"""
+		if not self.blastInternalPath:
+			self.blastInternalPath = os.path.join(self.args.tempDir, BLAST_FILE)
+		return self.blastInternalPath
+		
+	def getCheckPointPath(self, dFile):
+	"""to obtain the path for the chekpoint (.done) file"""
+		return os.path.join(self.args.tempDir, dFile)
+		
+	def createCheckPoint(self, cpFile):
+	"""to create the checkpoint file in the temporary directory, for continuation of the script 
+		when the option -R is being enabled"""
+		path = self.getCheckPointPath(cpFile)
+		open(path, 'w').close()
+
+	def checkPoint(self, dFile):
+	""" to check if a particular checkpoint has been created"""
+		path = self.getCheckPointPath(dFile)
+		return os.path.exists(path)
+		
+	def getLength(self):
+	""" obtain the length description of the kmer file name"""
+		if self.args.numberOfSeq == 0:
+			length = 'all'
+		else:
+			length = self.args.numberOfSeq
+		return str(length)
+		
+	def getSuffix(self):
+	""" writing of a naming convention."""
+		if not self.suffix:
+			suffix = self.getLength()
+			self.mink = str(self.args.minWordSize)
+			self.maxk = str(self.args.maxWordSize)
+			self.suffix = suffix + '_c' + self.mink + '_k' + self.maxk
+		return self.suffix
+		
+	def getTrainFile(self):
+	"""writing the filename and type of the kmer training file as an input for the SVM process"""
+		if not self.trainFile:
+			fName = self.getSuffix()
+			self.trainFile = 'Training' + '_' + fName + '.txt'
+		return str(self.trainFile)
+		
+	def getTestFile(self):
+	"""writing the filename and type of the kmer testing file as an input for the SVM process"""
+		if not self.testFile:
+			fName = self.getSuffix()
+			self.testFile = 'Testing' + '_' + fName + '.txt'
+		return str(self.testFile)
+		
+		
 #######################################
 
 
@@ -73,7 +157,7 @@ def iterFasta(path):
 	handle.close()
  
 #Functions for 02    
-def writeDatabase(args, fastaPath):
+def writeDatabase(args, options, fastaPath):
 	"""writes multiple sources to a fasta file. This function also calls iterFasta() in the process."""
 	logging.debug('Creating Database.')
 	hostPath      = args.hostSeq
@@ -93,14 +177,13 @@ def writeDatabase(args, fastaPath):
 		targetpath.write(name + "\n")
 		targetpath.write(seq + "\n")
 	targetpath.close()
-	checkpoint   = os.path.join(args.tempDir, 'writeDatabase.done')
-	open(checkpoint, 'w').close()
+	options.createCheckPoint('writedatabase.done')
 
-def makeDB(args):
+def makeDB(args, options):
 	"""calls the makeblastdb process from the command line via subprocess module. 
 	The database files by default will be created and stored at the temporary folder."""
-	dbPath    = os.path.join(args.tempDir, DB_NAME)
-	fastaPath = os.path.join(args.tempDir, DB_FASTA)
+	dbPath    = options.getDbPath()
+	fastaPath = options.getFastaDbPath()
 	logPath   = dbPath + '.log'
 	makeDBCmd = ['makeblastdb',
 				 '-title',
@@ -117,20 +200,19 @@ def makeDB(args):
 	if not submakeDB == 0:
 		logging.warning('Error detected. Please check logfile. Blast Database not created.')
 		sys.exit()
-	checkpoint = os.path.join(args.tempDir, 'makeDB.done')
-	open(checkpoint, 'w').close()  
+	options.createCheckPoint('makeDB.done')
 	    
 
 #Function for 03 BLAST SEARCH
-def runBlast(args):
+def runBlast(args, options):
 	"""calls the blastx process from the command line via subprocess module. Result obtained
 	from the BLAST search will be compressed into a zipped file. The output format of the result by default 
 	is set to '7' (tab-seaparated with comments)."""
     #Define BLAST variables
 	logging.info('Performing Blast Search')
 	eVal         = '%.2e' % args.maxBestEvalue
-	dbPath       = os.path.join(args.tempDir, DB_NAME)
-	blastOutput  = os.path.join(args.tempDir, BLAST_FILE)
+	dbPath       = options.getDbPath()
+	blastOutput  = options.getBlastInternalPath()
 	blastCmd = ['blastx',
 	            '-evalue',
 	            eVal,
@@ -146,24 +228,22 @@ def runBlast(args):
 	if not retCode == 0:
 		logging.warning('Error detected. Please check blastlogfile. Blast Search not executed or exit with error.')
 		sys.exit(1)
-	checkpoint   = os.path.join(args.tempDir, 'runBlast.done')
-	open(checkpoint, 'w').close()  
+	options.checkPoint('runBlast')
 	logging.debug('Blast finished')
 
 
 #Functions for 04 ParseBlast up to Preparing sets   
-def parseBlast(args):
+def parseBlast(args, options):
 	"""parses the blast result given or previously obtained, to later be used to prepare training and testing set of 
 	unambiguous sequences. This function returns an object called [querries] which summarises the blast results."""
-	blastPath = os.path.join(args.tempDir, BLAST_FILE)
 	if not args.blastResults:
-		path = blastPath
+		path = options.getBlastInternalPath()
 		if path.endswith('.gz'):
 			handle = gzip.open(path)
 		else:
 			handle = open(path,'r')
 	else:
-		path = args.blastResults
+		path = options.getBlastResultsPath()
 		if path.endswith('.gz'):
 			handle = gzip.open(path)
 		else:
@@ -226,7 +306,7 @@ def classify(querries, args):
 			classification[qName] = SYMB_CODE
 	return classification
 
-def seqSplit(args, classification):
+def seqSplit(args, options, classification):
 	"""writes the relevant unambiguous sequences into 4 fasta files: training.fasta for host sequences,
 	testing.fasta for host sequences, training.fasta for symb sequences and testing.fasta for symb sequences.
 	The size/ratio of the training to testing set can be modified by the user from the script option 
@@ -267,8 +347,8 @@ def seqSplit(args, classification):
 	logging.info('Found %d unambiguous hits' % len(classification))
 	logging.info('Found %d host only hits' % m)
 	logging.info('Found %d symbion only hits' % j)
-	checkpoint   = os.path.join(args.tempDir, 'parseBlast.done')
-	open(checkpoint, 'w').close()  
+	options.createCheckPoint('parseBlast.done')  
+
 
 #Functions for 05 Kmer Computations
 def prepareMaps(k, maxk, kmers):
@@ -299,7 +379,8 @@ def computerKmers(path, outfile, code, args, mode):
 	for i in xrange(kMin, kMax + 1):
 		maps.append(prepareMaps(0, i, ['']))
     # Initialise output
-	outPath = os.path.join(args.tempDir,outfile)
+	out     = str(outfile)
+	outPath = os.path.join(args.tempDir,out)
 	handle  = open(outPath, mode)
     # Initialise counts
 	counts  = {}
@@ -337,7 +418,7 @@ def computerKmers(path, outfile, code, args, mode):
 	logging.info('Processed %d sequences' % nSeqs)
 	handle.close()
 
-def iterKmers(args, kmerTrain, kmerTest):
+def iterKmers(args, options, kmerTrain, kmerTest):
 	"""computes the kmer count map for each of the training and testing sequences. The function outputs two files:
 	a training file and a testing file to be used as inputs for the SVM training. This function calls computerKmers() in the process"""
 	hostTrainpath = os.path.join(args.tempDir, HOST_TRAINING)
@@ -352,9 +433,7 @@ def iterKmers(args, kmerTrain, kmerTest):
 	computerKmers(hostTestpath, kmerTest, HOST_CODE, args, "w")
 	computerKmers(symbTrainpath, kmerTrain, SYMB_CODE, args, "a")
 	computerKmers(symbTestpath, kmerTest, SYMB_CODE, args, "a")
-	fileDone   = os.path.join(args.tempDir, 'kmers.done')
-	fileDone   = open(fileDone,'w')
-	fileDone.close()
+	options.createCheckPoint('kmers.done')
 
 #################################################################
 ################################################################
@@ -362,7 +441,7 @@ def iterKmers(args, kmerTrain, kmerTest):
 #################################################################
 #################################################################
 
-def callSVM(args, kmerTrain, kmerTest):
+def callSVM(args, options, kmerTrain, kmerTest):
 	"""calls the easy.py script through the command line using the subprocess module. 
 	That script in turn calls grid.py which performs the training for the SVM."""
 	easyPath  = os.path.join("libsvm", "easy.py")
@@ -372,8 +451,8 @@ def callSVM(args, kmerTrain, kmerTest):
 	easyCmd = ''.join(easyCmd)
 	logging.debug('Calling easy.py python script')
 	subprocess.Popen(easyCmd, shell=True)
-	checkpoint   = os.path.join(args.tempDir, 'svm.done')
-	open(checkpoint, 'w').close()  
+	options.createCheckPoint('svm.done')
+
 
 #Prediction SVM
 def loadPredictions(path):
@@ -408,20 +487,20 @@ def predictSVM(args, kmerTrain, kmerTest):
 	scaledFile      = kmerTrain + '.scale'
 	modelFile       = kmerTrain + '.model'
 	rangeFile       = kmerTrain + '.range' 
-	scaledTestFile  = kmerTest + '.scale'
-	predictTestFile = kmerTest + '.predict'
+	scaledTestFile  = kmerTest  + '.scale'
+	predictTestFile = kmerTest  + '.predict'
 	logging.info('Predicting and Classifying Sequences')
-	fastaPath = arg.queries
-	kmerScale = fastaPath.split('.')[0:-1] + '.scaled'
+	fastaPath = args.queries
+	kmerScale = '.'.join(fastaPath.split('.')[:-1]) + '.scaled'
 	kmerScale = os.path.join(args.tempDir, kmerScale)
-	kmerPred  = fastaPath.split('.')[0:-1] + '.pred'
+	kmerPred  = '.'.join(fastaPath.split('.')[:-1]) + '.pred'
 	kmerPred = os.path.join(args.tempDir, kmerPred)
-	kmerFile  = fastaPath.split('.')[0:-1] + '.kmers'
-	kmerOut = os.path.join(args.tempDir, kmerOut)
+	kmerFile  = '.'.join(fastaPath.split('.')[:-1]) + '.kmers'
+	kmerOut = os.path.join(args.tempDir, kmerFile)
 	###FIXME Need to work on writing the output of SVM scripts to Temp, Currently every output from this script
 	## goes to Temp, but the grid.py & easy.py writes scale data files to current DIR. CHECK LATER ##### 
 	#This function by default writes output file to temp DIR
-	computerKmers(arg.queries, kmerFile, HOST_CODE, args, "w")
+	computerKmers(args.queries, kmerFile, HOST_CODE, args, "w")
 	#SVM_Scale
 	scaleCmd   = [ svmscale_exe, ' -r ', rangeFile, ' ', kmerOut,' > ', kmerScale]
 	scaleCmd   = ''.join(scaleCmd)
@@ -438,10 +517,25 @@ def predictSVM(args, kmerTrain, kmerTest):
 
 
 def tempPathCheck(args):
+	"""to check if the temporary folder exists, else it will be created."""
 	logging.info('Checking for temporary file folder')
 	tempFolder = os.path.abspath(args.tempDir) 
 	if not os.path.isdir(tempFolder):
 		os.makedirs(tempFolder)
+
+def checkExecutable(program):  
+	"""to check whether the required program(.exe) has been installed and can be executable."""
+	path = os.getenv('PATH')
+	root = os.path.dirname(os.path.abspath(sys.argv[0]))
+	libPath = os.path.join(os.getcwd(), LIBSVM_DIR)
+	for d in path.split(os.path.pathsep):  
+		exe = os.path.join(d, program) 
+		if os.path.exists(exe) and os.access(exe, os.X_OK):
+			return exe
+	for dir_, _, files in os.walk(libPath):
+		dir_ = os.path.join(dir_, program)
+		if os.path.exists(dir_) and os.access(line, os.X_OK):
+			return dir_
 
 
 def mainArgs():
@@ -525,6 +619,7 @@ def mainArgs():
 def main():
 	logging.basicConfig(level=logging.INFO, format=("%(asctime)s - %(funcName)s - %(message)s"))
 	args    = mainArgs()
+	options = PsyTransOptions(args)
 	restart = args.restart
 	if not (args.hostSeq and args.symbSeq and not args.blastResults) and \
 		not (args.blastResults and not (args.hostSeq or args.symbSeq)):
@@ -535,61 +630,64 @@ def main():
 	logging.info("Arguments parsed. Starting...")
 	tempPathCheck(args)
 
-	workingPath = os.getcwd()
-	blastPath   = os.path.join(workingPath, args.blastResults)
-	if not os.path.exists(blastPath):
+	blastPath = options.getBlastResultsPath() ### FIXME dont double guess the user
+	if not (options.isBlastGiven() and os.path.exists(blastPath)):
+		if not options.isBlastGiven():
     	#Step 1
-		fastaPath  = os.path.join(args.tempDir, DB_FASTA)
-		dbPath     = os.path.join(args.tempDir, DB_NAME)
-		checkpoint = os.path.join(args.tempDir, "writeDatabase.done")  
-		if not (restart and os.path.exists(checkpoint)):
-			writeDatabase(args, fastaPath)
-			makeDB(args)
-		if args.stopAfter == 'db':
-			logging.info('Stop after "db" requested, exiting now')
-			sys.exit()
+			fastaPath  = options.getFastaDbPath()
+			dbPath     = options.getDbPath()
+			if not (restart and options.checkPoint("writeDatabase.done")):
+				writeDatabase(args, options, fastaPath)
+				if checkExecutable('makeblastdb'):
+					makeDB(args, options)
+				else:
+					logging.warning('makeblastdb not found. Exiting')
+					sys.exit()
+			if args.stopAfter == 'db':
+				logging.info('Stop after "db" requested, exiting now')
+				sys.exit()
 
-    	#Step 2
-		checkpoint = os.path.join(args.tempDir, "runBlast.done")
-		if not (restart and os.path.exists(checkpoint)):
-			runBlast(args)
-		if args.stopAfter == 'doBlast':
-			logging.info('Stop after "doBlast" requested, exiting now')
+    		#Step 2
+			if not (restart and options.checkPoint("runBlast.done")):
+				if checkExecutable('blastx'):
+					runBlast(args, options)
+				else:
+					logging.warning('blastx not detected in PATH. Please check that the program is being installed correctly. Exiting')
+					sys.exit()
+			if args.stopAfter == 'runBlast':
+				logging.info('Stop after "runBlast" requested, exiting now')
+				sys.exit()
+				
+		else:
+			logging.warning('Path to blast result does not exist. Exiting.')
 			sys.exit()
 
     #Step 3
-	checkpoint = os.path.join(args.tempDir, "parseBlast.done")
-	if not (restart and os.path.exists(checkpoint)):
-		querries       = parseBlast(args)
+	if not (restart and options.checkPoint("parseBlast.done")):
+		querries       = parseBlast(args, options)
 		classification = classify(querries, args)
-		seqSplit(args, classification)
+		seqSplit(args, options, classification)
 	if args.stopAfter == 'parseBlast':
 		logging.info('Stop after "parseBlast" requested, exiting now')
 		return
 
     #Step 4
 	#Kmer preparation
-	######### put these paths in the PsytransOptions class
-	if args.numberOfSeq == 0:
-		suffix = 'all'
-	else:
-		suffix = str(args.numberOfSeq)
-	mink      = str(args.minWordSize)
-	maxk      = str(args.maxWordSize)
-	suffix    = suffix + '_c' + mink + '_k' + maxk
-	kmerTrain = 'training_' + suffix + '.txt'
-	kmerTest  = 'testing_' + suffix + '.txt'
-	checkpoint = os.path.join(args.tempDir, "kmers.done")
-	if not (restart and os.path.exists(checkpoint)):
-		iterKmers(args, kmerTrain, kmerTest)
+	kmerTrain = options.getTrainFile()
+	kmerTest  = options.getTestFile()
+	if not (restart and options.checkPoint("kmers.done")):
+		iterKmers(args, options, kmerTrain, kmerTest)
 	if args.stopAfter == 'kmers':
 		logging.info('Stop after "kmers" requested, exiting now')
 		return
 
     #Step 5
-	checkpoint = os.path.join(args.tempDir, "svm.done")
-	if not (restart and os.path.exists(checkpoint)):
-		callSVM(args, kmerTrain, kmerTest)
+	if not (restart and options.checkPoint("svm.done")):
+		if checkExecutable('svm-train') and checkExecutable('svm-scale') and checkExecutable('svm-predict'):
+			callSVM(args, options, kmerTrain, kmerTest)
+		else:
+			logging.warning('SVM package not complete. please check that svm-train, svm-scale and svm-predict has been correctly installed')
+			sys.exit()
 	if args.stopAfter == 'SVM':
 		logging.info('Stop after "SVM" requested, exiting now')
 		return
@@ -598,7 +696,7 @@ def main():
 	predictSVM(args, kmerTrain, kmerTest)
 	logging.info("SVM classification completed successfully.")
 	
-	if args.clearTemp:   ### FIXME Do this at the end, not at the start
+	if args.clearTemp:
 		shutil.rmtree(args.tempDir)
 
 if __name__ == '__main__':  
