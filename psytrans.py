@@ -10,20 +10,38 @@ import shutil
 import os
 import numpy
 import threading
+import traceback
+from math import exp, log, log10
 
-if sys.version_info[0] < 3:
-    from Queue import Queue
+if(sys.hexversion < 0x03000000):
+    import Queue
 else:
-    from queue import Queue
+    import queue as Queue
 
 
-HOST_NAME  = "host"
-SYMB_NAME  = "symb"
+#######################
+#######################
+### Global contants ###
+#######################
+#######################
+
+HOST_NAME  = 'coral'
+SYMB_NAME  = 'zoox'
 DB_NAME    = "HostSymbDB"
 DB_FASTA   = DB_NAME + '.fasta'
 BLAST_FILE = HOST_NAME + SYMB_NAME + '_test_OUTPUT.txt'
+BLAST_SORT = HOST_NAME + SYMB_NAME + '_blastClassification.txt'
 HOST_CODE  = 1
 SYMB_CODE  = 2
+
+# SVM GLOBAL VARIABLES
+SVM_FOLD   = 5
+SVM_CSTART = -5
+SVM_CEND   = 15
+SVM_CSTEP  = 2
+SVM_GSTART = 3
+SVM_GEND   = -15
+SVM_GSTEP  = -2
 
 HOST_TRAINING = HOST_NAME + '_training.fasta'
 HOST_TESTING  = HOST_NAME + '_testing.fasta'
@@ -33,6 +51,11 @@ LIBSVM_DIR    = 'libsvm'
 
 LETTERS = ('A', 'T', 'G', 'C')
 
+####################################################################
+####################################################################
+### Class to store the various paths used throughout the program ###
+####################################################################
+####################################################################
 
 class PsyTransOptions:
     """This class consists of attributes to allow database and file paths to be obtained conveniently.
@@ -51,6 +74,8 @@ class PsyTransOptions:
         self.hostTestPath      = None
         self.symbTrainPath     = None
         self.symbTestPath      = None
+        self.blastSortPath     = None
+        self.SVMOutPath        = None
 
     def getDbPath(self):
         """returns the file path to the blast database"""
@@ -146,11 +171,29 @@ class PsyTransOptions:
 
     def getSymbTestPath(self):
         """get testing path of host sequences"""
-        if not self.symbTrainPath:
-            self.symbTrainPath = os.path.join(self.args.tempDir, SYMB_TESTING)
-        return self.symbTrainPath
+        if not self.symbTestPath:
+            self.symbTestPath = os.path.join(self.args.tempDir, SYMB_TESTING)
+        return self.symbTestPath
+        
+    def getBlastSortPath(self):
+        """get testing path of host sequences"""
+        if not self.blastSortPath:
+            self.blastSortPath = os.path.join(self.args.tempDir, BLAST_SORT)
+        return self.blastSortPath
+        
+    def getSVMOutPath(self):
+        """get svm output path"""
+        if not self.SVMOutPath:
+            fName = self._getSuffix()
+            self.SVMOutPath = fName + '.out'
+            self.SVMOutPath = os.path.join(self.args.tempDir, self.SVMOutPath)
+        return self.SVMOutPath
 
-#######################################
+######################
+######################
+### Misc utilities ###
+######################
+######################
 
 def iterFasta(path):
     """Iterates over the sequences of a fasta file"""
@@ -176,7 +219,12 @@ def iterFasta(path):
         yield (name, ''.join(seq))
     handle.close()
 
-#Functions for 02
+#####################################
+#####################################
+### Make training set using BLAST ###
+#####################################
+#####################################
+
 def writeDatabase(args, options, fastaPath):
     """writes multiple sources to a fasta file. This function also calls iterFasta() in the process."""
     logging.debug('Creating Database.')
@@ -223,7 +271,6 @@ def makeDB(args, options):
     options.createCheckPoint('makeDB.done')
 
 
-#Function for 03 BLAST SEARCH
 def runBlast(args, options):
     """calls the blastx process from the command line via subprocess module. Result obtained
     from the BLAST search will be compressed into a zipped file. The output format of the result by default
@@ -252,7 +299,6 @@ def runBlast(args, options):
     logging.debug('Blast finished')
 
 
-#Functions for 04 ParseBlast up to Preparing sets
 def parseBlast(args, options):
     """parses the blast result given or previously obtained, to later be used to prepare training and testing set of
     unambiguous sequences. This function returns an object called [querries] which summarises the blast results."""
@@ -280,17 +326,18 @@ def parseBlast(args, options):
         qName  = fields[0]
         hName  = fields[1]
         evalue = float(fields[10])
+        bitscore = float(fields[11])
         if not qName in querries:
             querries[qName] = []
             n += 1
-        hit = (hName, evalue)
+        hit = (hName, evalue, bitscore)
         querries[qName].append(hit)
     logging.info('Parsed %d blast records' % n)
     logging.info('Found %d queries hits' % len(querries))
     handle.close()
     return querries
 
-def classify(querries, args):
+def classifyFromBlast(querries, args):
     """classifies the entries in the list [querries] into ambiguous and unambiguous sequences.
     the measurement criteria used here is just the eValue obtaiend from the BLAST results at the moment.
     The function returns a dictionary [classification], with a complete categorisation of ambiguous sequences
@@ -301,8 +348,8 @@ def classify(querries, args):
         if h1[1] < h2[1]:
             return -1
         return 0
-
-    classification = {}
+    trainingClassification = {}
+    blastClassification    = {}
     for qName in querries:
         hits = querries[qName]
         hits.sort(sortHits)
@@ -310,23 +357,36 @@ def classify(querries, args):
         hasZoox         = False
         coralBestEvalue = -1
         zooxBestEvalue  = -1
-        for hName, evalue in hits:
-            if hName.startswith('coral'):
+        coralBestBit    = 0
+        zooxBestBit     = 0
+        for hName, evalue, bitscore in hits:
+            if hName.startswith(HOST_NAME):
                 if not hasCoral:
                     hasCoral        = True
                     coralBestEvalue = evalue
+                    coralBestBit    = bitscore
             else :
                 if not hasZoox:
                     hasZoox        = True
                     zooxBestEvalue = evalue
-        # TODO Could be improved
+                    zooxBestBit   = bitscore
         if hasCoral and not hasZoox and coralBestEvalue <= args.maxBestEvalue:
-            classification[qName] = HOST_CODE
+            trainingClassification[qName] = HOST_CODE
+            blastClassification[qName]    = HOST_CODE
         elif hasZoox and not hasCoral and zooxBestEvalue <= args.maxBestEvalue:
-            classification[qName] = SYMB_CODE
-    return classification
+            trainingClassification[qName] = SYMB_CODE
+            blastClassification[qName]    = SYMB_CODE
+        if hasZoox and hasCoral:
+            bitRatio = float(coralBestBit)/float(zooxBestBit)
+            bitDelta = coralBestBit - zooxBestBit
+            if bitRatio > 2 and bitDelta > 100:
+                blastClassification[qName] = HOST_CODE
+            elif bitRatio <= 0.5 and bitDelta <= -100:
+                blastClassification[qName] = SYMB_CODE
+    return trainingClassification, blastClassification
 
-def seqSplit(args, options, classification):
+
+def seqSplit(args, options, trainingClassification, blastClassification):
     """writes the relevant unambiguous sequences into 4 fasta files: training.fasta for host sequences,
     testing.fasta for host sequences, training.fasta for symb sequences and testing.fasta for symb sequences.
     The size/ratio of the training to testing set can be modified by the user from the script option
@@ -334,14 +394,15 @@ def seqSplit(args, options, classification):
     m = 0
     j = 0
     d = args.trainingTestingRatio
-    handle = open(args.queries)
+    handle    = open(args.queries)
     hostTrain = open(options.getHostTrainPath(), 'w')
     hostTest  = open(options.getHostTestPath(), 'w')
     symbTrain = open(options.getSymbTrainPath(), 'w')
     symbTest  = open(options.getSymbTestPath(), 'w')
+    blastSort = open(options.getBlastSortPath(), 'w')
     for name, seq in iterFasta(args.queries):
         identity = identity = (name.split(' ')[0])[1:]
-        seqClass = classification.get(identity, 0)
+        seqClass = trainingClassification.get(identity, 0)
         if seqClass == HOST_CODE:
             if m % d == 0:
                 hostTrain.write(">" + identity + "\n")
@@ -358,19 +419,27 @@ def seqSplit(args, options, classification):
                 symbTest.write(">" + identity + "\n")
                 symbTest.write(seq + "\n")
             j += 1
-
+    for blastId in blastClassification:
+        blastCode = blastClassification[blastId]
+        blastSort.write('%s\t%d\n' % (blastId, blastCode))
     handle.close()
     hostTest.close()
     hostTrain.close()
     symbTest.close()
     symbTrain.close()
-    logging.info('Found %d unambiguous hits' % len(classification))
+    blastSort.close()
+    logging.info('Found %d unambiguous hits' % len(trainingClassification))
     logging.info('Found %d host only hits' % m)
     logging.info('Found %d symbion only hits' % j)
     options.createCheckPoint('parseBlast.done')
 
 
-#Functions for 05 Kmer Computations
+############################
+############################
+### Compute Kmer vectors ###
+############################
+############################
+
 def prepareMaps(k, maxk, kmers):
     """prepares the kmer maps for the specified kmer range."""
     if k == maxk:
@@ -453,13 +522,15 @@ def iterKmers(args, options, kmerTrain, kmerTest):
     computerKmers(symbTestpath, kmerTest, SYMB_CODE, args, "a")
     options.createCheckPoint('kmers.done')
 
-#################################################################
-################################################################
-#Calling chlin\'s SVM script'###################################
-#################################################################
-#################################################################
+##################################################################
+##################################################################
+### SVM computations, based on svm-easy / svm-grid from libsvm ###
+##################################################################
+##################################################################
 
 def doSVMEasy(args, options, kmerTrain, kmerTest):
+    kmerTrain       = os.path.join(args.tempDir, kmerTrain)
+    kmerTest        = os.path.join(args.tempDir, kmerTest)
     svmTrain        = checkExecutable('svm-train')
     svmPredict      = checkExecutable('svm-predict')
     svmScale        = checkExecutable('svm-scale')
@@ -476,7 +547,7 @@ def doSVMEasy(args, options, kmerTrain, kmerTest):
                        scaledFile]
     cmdScale        = ' '.join(cmdScale)
     subprocess.call(cmdScale, shell=True)
-    c, g, rate      = doSVMGrid(scaledFile)
+    c, g, rate      = doSVMGrid(args, options, scaledFile)
     cmdTrain        = [svmTrain,
                        '-c',
                        str(c),
@@ -498,10 +569,12 @@ def doSVMEasy(args, options, kmerTrain, kmerTest):
                        modelFile,
                        predictTestFile]
     logging.info('Prediction in: %s' % predictTestFile)
+    options.createCheckPoint('svm.done')
 
-def doSVMGrid(scaledFile):
+def calculateSVMGridJobs():
+    """Calculates the coordinates of the search space"""
 
-    def range_f(begin,end,step):
+    def rangeF(begin, end, step):
         seq = []
         while True:
             if step > 0 and begin > end:
@@ -512,13 +585,13 @@ def doSVMGrid(scaledFile):
             begin = begin + step
         return seq
 
-    def permute_sequence(seq):
+    def permuteSequence(seq):
         n = len(seq)
         if n <= 1:
             return seq
-        mid   = int(n/2)
-        left  = permute_sequence(seq[:mid])
-        right = permute_sequence(seq[mid+1:])
+        mid   = int(n / 2)
+        left  = permuteSequence(seq[:mid])
+        right = permuteSequence(seq[mid+1:])
         ret   = [seq[mid]]
         while left or right:
             if left:
@@ -527,55 +600,122 @@ def doSVMGrid(scaledFile):
                 ret.append(right.pop(0))
         return ret
 
-    def calculate_jobs():
-        c_seq = permute_sequence(range_f(c_begin,c_end,c_step))
-        g_seq = permute_sequence(range_f(g_begin,g_end,g_step))
-        nr_c = float(len(c_seq))
-        nr_g = float(len(g_seq))
-        i = 0
-        j = 0
-        jobs = []
+    cSeq = permuteSequence(rangeF(SVM_CSTART, SVM_CEND, SVM_CSTEP))
+    gSeq = permuteSequence(rangeF(SVM_GSTART, SVM_GEND, SVM_GSTEP))
 
-        while i < nr_c or j < nr_g:
-            if i/nr_c < j/nr_g:
-                # increase C resolution
-                line = []
-                for k in range(0,j):
-                    line.append((c_seq[i],g_seq[k]))
-                i = i + 1
-                jobs.append(line)
+    nC   = float(len(cSeq))
+    nG   = float(len(gSeq))
+    i    = 0
+    j    = 0
+    jobs = []
+    while i < nC or j < nG:
+        if i / nC < j / nG:
+            # increase C resolution
+            line = []
+            for k in xrange(0, j):
+                line.append((cSeq[i], gSeq[k]))
+            i = i + 1
+            jobs.append(line)
+        else:
+            # increase g resolution
+            line = []
+            for k in xrange(0, i):
+                line.append((cSeq[k], gSeq[j]))
+            j = j + 1
+            jobs.append(line)
+    return jobs
+
+# used to notify the worker to stop
+class SVMGridWorkerStopToken:
+        pass
+
+class SVMGridWorker(threading.Thread):
+
+    def __init__(self, name, jobQueue, resultQueue, dataPath):
+        threading.Thread.__init__(self)
+        self.name        = name
+        self.jobQueue    = jobQueue
+        self.resultQueue = resultQueue
+        self.dataPath    = dataPath
+
+    def run(self):
+        while True:
+            (c, g) = self.jobQueue.get()
+            if c is SVMGridWorkerStopToken:
+                self.jobQueue.put((c, g))
+                break
+            try:
+                rate = self.runeOne(2.0 ** c, 2.0 ** g)
+                if rate is None:
+                    raise RuntimeError(RuntimeError("Got no rate"))
+            except:
+                # We failed, let others do that and we just quit
+                excInfo = sys.exc_info()
+                msg     = traceback.format_exception(excInfo[0], excInfo[1], excInfo[2])
+                msg     = ''.join(msg)
+                logging.warning('Worker %s failed:' % self.name)
+                logging.warning(msg)
+                self.jobQueue.put((c, g))
+                break
             else:
-                # increase g resolution
-                line = []
-                for k in range(0,i):
-                    line.append((c_seq[k],g_seq[j]))
-                j = j + 1
-                jobs.append(line)
-        return jobs
+                self.resultQueue.put((self.name, c, g, rate))
 
-    svmTrain   = checkExecutable('svm-train')
-    fold       = 5
-    c_begin    = -5
-    c_end      = 15
-    c_step     = 2
-    g_begin    = 3
-    g_end      = -15
-    g_step     = -2
-    svmOutFile = 'svmOutFile' ### FIXME put this in the class or global variable
-    return c, g, rate
+    def runeOne(self, c, g):
+        svmTrain = checkExecutable('svm-train')
+        cmd      = [svmTrain,
+                    '-c',
+                    str(c),
+                    '-g',
+                    str(g),
+                    '-v',
+                    str(SVM_FOLD),
+                    self.dataPath]
+        cmd      = ' '.join(cmd)
+        proc     = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+        result   = proc.stdout.readlines()
+        for line in result:
+            if line.find("Cross") != -1:
+                return float(line.split()[-1][:-1])
 
-def callSVM(args, options, kmerTrain, kmerTest):
-    """calls the easy.py script through the command line using the subprocess module.
-    That script in turn calls grid.py which performs the training for the SVM."""
-    easyPath  = os.path.join("libsvm", "easy.py")
-    trainPath = os.path.join(args.tempDir, kmerTrain)
-    testPath  = os.path.join(args.tempDir, kmerTest)
-    easyCmd = ['python ', easyPath, ' ', trainPath, ' ', testPath]
-    easyCmd = ''.join(easyCmd)
-    logging.debug('Calling easy.py python script')
-    subprocess.Popen(easyCmd, shell=True)
-    options.createCheckPoint('svm.done')
+def doSVMGrid(args, options, dataPath):
+    # put jobs in queue
+    jobs        = calculateSVMGridJobs()
+    jobQueue    = Queue.Queue(0)
+    resultQueue = Queue.Queue(0)
+    nWorkers    = 1 ### FIXME get the number of threads from the arguments
+    for line in jobs:
+        for (c, g) in line:
+            jobQueue.put((c, g))
+    jobQueue._put = jobQueue.queue.appendleft
 
+    # fire local workers
+    for i in xrange(nWorkers):
+        worker = SVMGridWorker('Worker%03d' % i, jobQueue, resultQueue, dataPath)
+        worker.start()
+
+    doneJobs   = {}
+    svmOutPath = options.getSVMOutPath()
+    resultFile = open(svmOutPath, 'w')
+    bestRate   = -1
+    bestC1     = None
+    bestG1     = None
+
+    for line in jobs:
+        for (c, g) in line:
+            while (c, g) not in doneJobs:
+                (workerName, c1, g1, rate) = resultQueue.get()
+                doneJobs[(c1, g1)]         = rate
+                resultFile.write('%f %f %f\n' % (c1, g1, rate))
+                if (rate > bestRate) or (rate == bestRate and g1 == bestG1 and c1 < bestC1):
+                    bestRate = rate
+                    bestC1   = c1
+                    bestG1   = g1
+                    bestC    = 2.0 ** c1
+                    bestG    = 2.0 ** g1
+    jobQueue.put((SVMGridWorkerStopToken, None))
+    resultFile.close()
+    logging.info('Optimal SVM parameters: c=%f, g=%f, rate=%f' % (bestC, bestG, bestRate))
+    return bestC, bestG, bestRate
 
 #Prediction SVM
 def loadPredictions(path):
@@ -709,8 +849,7 @@ def mainArgs():
                         help='Maxmimum value of DNA word length')
     parser.add_argument('-v',
                         '--verboseMode',
-                        type = bool,
-                        default=True,
+                        action='store_true',
                         help='Turn Verbose mode on?')
     parser.add_argument('-t',
                         '--tempDir',
@@ -719,8 +858,7 @@ def mainArgs():
                         help='Name of temporary directory')
     parser.add_argument('-X',
                         '--clearTemp',
-                        type=bool,
-                        default=False,
+                        action='store_true',
                         help='Clear all temporary data upon completion?')
     parser.add_argument('-z',
                         '--stopAfter',
@@ -729,8 +867,7 @@ def mainArgs():
                         help='Optional exit upon completion of stage.')
     parser.add_argument('-R',
                         '--restart',
-                        type=bool,
-                        default=False,
+                        action='store_true',
                         help='Continue process from last exit stage.')
     args = parser.parse_args()
     if args.minWordSize > args.maxWordSize:
@@ -784,9 +921,9 @@ def main():
 
     #Step 3
     if not (restart and options.checkPoint("parseBlast.done")):
-        querries       = parseBlast(args, options)
-        classification = classify(querries, args)
-        seqSplit(args, options, classification)
+        querries = parseBlast(args, options)
+        trainingClassification, blastClassification = classifyFromBlast(querries, args)
+        seqSplit(args, options, trainingClassification, blastClassification)
     if args.stopAfter == 'parseBlast':
         logging.info('Stop after "parseBlast" requested, exiting now')
         return
@@ -804,7 +941,7 @@ def main():
     #Step 5
     if not (restart and options.checkPoint("svm.done")):
         if checkExecutable('svm-train') and checkExecutable('svm-scale') and checkExecutable('svm-predict'):
-            callSVM(args, options, kmerTrain, kmerTest)
+            doSVMEasy(args, options, kmerTrain, kmerTest)
         else:
             logging.warning('SVM package not complete. please check that svm-train, svm-scale and svm-predict has been correctly installed')
             sys.exit()
