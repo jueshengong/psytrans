@@ -555,6 +555,7 @@ def doSVMEasy(args, options, kmerTrain, kmerTest):
                        str(g),
                        scaledFile,
                        modelFile]
+    cmdTrain        = ' '.join(cmdTrain)
     subprocess.call(cmdTrain, shell=True)
     cmdScale        = [svmScale,
                        '-r',
@@ -568,6 +569,8 @@ def doSVMEasy(args, options, kmerTrain, kmerTest):
                        scaledTestFile,
                        modelFile,
                        predictTestFile]
+    cmdPredict      = ' '.join(cmdPredict)
+    subprocess.call(cmdPredict, shell=True)
     logging.info('Prediction in: %s' % predictTestFile)
     options.createCheckPoint('svm.done')
 
