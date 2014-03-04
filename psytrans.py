@@ -76,6 +76,9 @@ class PsyTransOptions:
         self.symbTestPath      = None
         self.blastSortPath     = None
         self.SVMOutPath        = None
+        self.chunkList         = None
+        self.threadBlastList   = None
+            
 
     def getDbPath(self):
         """returns the file path to the blast database"""
@@ -96,7 +99,60 @@ class PsyTransOptions:
             return True
         else:
             return False
-
+            
+    def getChunkList(self):
+        """To obtain the list of fasta chunk paths"""
+        if not self.chunkList:
+            self.chunkList = []
+            blastInput  = self.args.queries
+            nbThreads   = self.args.numberOfThreads
+            fastaPrefix = blastInput.split('/')[-1]
+            fastaPrefix = fastaPrefix.split('.')[:-1]
+            fastaPrefix = ''.join(fastaPrefix)
+            for i in xrange(nbThreads):
+                fastaChunkName = fastaPrefix + '_' + str(i) + '.fasta'
+                fastaChunkName = os.path.join(self.args.tempDir, fastaChunkName)
+                self.chunkList.append(fastaChunkName)
+            return self.chunkList
+        else:
+            return self.chunkList    
+            
+    def createChunkFiles(self):
+        """To create the new chunk .fasta files"""
+        chunkPath = self.getChunkList()
+        for path in chunkPath:
+            open(path, 'w')
+            
+    def getThreadQueries(self, threadId):
+        """To obtain the input fasta chunk on the specified thread"""
+        chunkPath   = self.getChunkList()
+        chunkThreadPath = chunkPath[threadId]
+        return chunkThreadPath
+    
+    def getThreadBlastList(self):
+        """To obtain the list of threaded blast output paths"""
+        if not self.threadBlastList:
+            self.threadBlastList = []
+            blastName = BLAST_FILE
+            nbThreads   = self.args.numberOfThreads            
+            blastThreadName = blastName.split('.')[:-1]
+            blastThreadName = ''.join(blastThreadName)
+            for i in xrange(nbThreads):
+                blastThreadFile = blastThreadName + '_' + str(i) + '.txt'
+                blastThreadPath = os.path.join(self.args.tempDir, blastThreadFile)
+                self.threadBlastList.append(blastThreadPath)
+            return self.threadBlastList
+        else:
+            return self.threadBlastList 
+                
+    
+    def getThreadBlastResultsPath(self, threadId):
+        """To obtain the BLAST output on the specified thread"""
+        threadBlastList = self.getThreadBlastList()
+        threadBlastPath = threadBlastList[threadId]
+        return threadBlastPath
+        
+                      
     def getBlastResultsPath(self):
         """To obtain the path to the Blast results"""
         if self.args.blastResults:
@@ -270,21 +326,49 @@ def makeDB(args, options):
         sys.exit()
     options.createCheckPoint('makeDB.done')
 
+        
+def writeChunk(options, seqId, seq, n):
+    chunkList = options.getChunkList()
+    handle = open(chunkList[n], 'a')
+    handle.write(seqId + "\n")
+    handle.write(seq + "\n")
+    handle.close()
+    
 
-def runBlast(args, options):
+def splitBlastInput(args, options, nbThreads):
+    """To split the input .fasta file into chunks for parallel BLAST search"""
+    blastInput  = args.queries
+    fastaPrefix = blastInput.split('/')[-1]
+    fastaPrefix = fastaPrefix.split('.')[:-1]
+    n = 0
+    #create chunks of .fasta files
+    options.createChunkFiles()
+    #writing to each chunk .fasta
+    for name, seq in iterFasta(blastInput):
+        seqId = name
+        seq = seq
+        writeChunk(options, seqId, seq, n)
+        n += 1
+        if not n < nbThreads:
+            n = 0
+    logging.debug('input fasta have been successfully splitted into %d chunks' % nbThreads) 
+         
+           
+
+def runBlast(args, options, threadId):
     """calls the blastx process from the command line via subprocess module. Result obtained
     from the BLAST search will be compressed into a zipped file. The output format of the result by default
     is set to '7' (tab-seaparated with comments)."""
     #Define BLAST variables
-    logging.info('Performing Blast Search')
+    logging.info('Performing Blast Search on thread %d' % threadId)
     eVal         = '%.2e' % args.maxBestEvalue
     dbPath       = options.getDbPath()
-    blastOutput  = options.getBlastResultsPath()
+    blastOutput  = options.getThreadBlastResultsPath(threadId) 
     blastCmd = ['blastx',
                 '-evalue',
                 eVal,
                 '-query',
-                args.queries,
+                options.getThreadQueries(threadId), 
                 '-db',
                 dbPath,
                 '-outfmt 7',
@@ -295,15 +379,38 @@ def runBlast(args, options):
     if not retCode == 0:
         logging.warning('Error detected. Please check blastlogfile. Blast Search not executed or exit with error.')
         sys.exit(1)
-    options.checkPoint('runBlast')
     logging.debug('Blast finished')
 
+def mergeBlastOutput(options, nbThreads):
+    blastOut = options.getBlastResultsPath()
+    blastOutHandle = open(blastOut, 'w')
+    for i in xrange(nbThreads):
+        threadPath   = options.getThreadBlastResultsPath(i)
+        threadHandle = open(threadPath, 'r')
+        blastOutHandle.write(threadHandle.read())
+        threadHandle.close()
+    blastOutHandle.close()
+    logging.info('BLAST results merged into: %s ' % blastOut)
+
+def runBlastThreads(args, options):
+    nbThreads = args.numberOfThreads
+    splitBlastInput(args, options, nbThreads)
+    threads = []
+    for i in xrange(nbThreads):
+        t = threading.Thread(target=runBlast, args=(args, options, i))
+        threads.append(t)
+        t.start()
+    for i in xrange(nbThreads):
+        threads[i].join()
+    mergeBlastOutput(options, nbThreads)
+    options.createCheckPoint('runBlast.done')
+        
 
 def parseBlast(args, options):
     """parses the blast result given or previously obtained, to later be used to prepare training and testing set of
     unambiguous sequences. This function returns an object called [querries] which summarises the blast results."""
     if not args.blastResults:
-        path = options.getBlastPath()
+        path = options.getBlastResultsPath()
         if path.endswith('.gz'):
             handle = gzip.open(path)
         else:
@@ -685,7 +792,7 @@ def doSVMGrid(args, options, dataPath):
     jobs        = calculateSVMGridJobs()
     jobQueue    = Queue.Queue(0)
     resultQueue = Queue.Queue(0)
-    nWorkers    = 1 ### FIXME get the number of threads from the arguments
+    nWorkers    = args.numberOfThreads 
     for line in jobs:
         for (c, g) in line:
             jobQueue.put((c, g))
@@ -716,13 +823,13 @@ def doSVMGrid(args, options, dataPath):
                     bestC    = 2.0 ** c1
                     bestG    = 2.0 ** g1
     jobQueue.put((SVMGridWorkerStopToken, None))
+    ### TODO check if we need to keep track of the threads and call join
     resultFile.close()
     logging.info('Optimal SVM parameters: c=%f, g=%f, rate=%f' % (bestC, bestG, bestRate))
     return bestC, bestG, bestRate
 
 #Prediction SVM
 
-##FIXME 
 def loadContent(path):
     handle      = open(path)
     content     = handle.read()
@@ -760,8 +867,6 @@ def writeOutput(args, predictions, blastClassification, fastaName, prefix1, pref
     j = 0
     if j < xrange(size):
         assert predictions[j] in '12'
-        for name, seq
-        
         for name, seq in iterFasta(fastaPath):
             name = (name.split(' ')[0])[1:]
             blastCode = blastClassification.get(name, 0)
@@ -812,9 +917,6 @@ def predictSVM(args, kmerTrain, kmerTest):
     kmerPred  = os.path.join(args.tempDir, kmerPred)
     kmerFile  = '.'.join(fastaPath.split('.')[:-1]) + '.kmers'
     kmerOut   = os.path.join(args.tempDir, kmerFile)
-    ###FIXME Need to work on writing the output of SVM scripts to Temp, Currently every output from this script
-    ## goes to Temp, but the grid.py & easy.py writes scale data files to current DIR. CHECK LATER #####
-    #This function by default writes output file to temp DIR
     computerKmers(args.queries, kmerFile, HOST_CODE, args, "w")
     #SVM_Scale
     scaleCmd   = [ svmScale,
@@ -883,6 +985,11 @@ def mainArgs():
                         '--blastResults',
                         type=str,
                         help='Blast results obtained')
+    parser.add_argument('-p',
+                        '--numberOfThreads',
+                        type=int,
+                        default='1',
+                        help='Number of threads to run the BLAST search and SVM')
     parser.add_argument('-e',
                         '--maxBestEvalue',
                         type=float,
@@ -968,7 +1075,7 @@ def main():
         #Step 2
         if not (restart and options.checkPoint("runBlast.done")):
             if checkExecutable('blastx'):
-                runBlast(args, options)
+                runBlastThreads(args, options)
             else:
                 logging.warning('blastx not detected in PATH. Please check that the program is being installed correctly. Exiting')
                 sys.exit()
@@ -1011,7 +1118,7 @@ def main():
         return
 
     #Step 6
-    if restart:
+    if not restart:
         blastClassification = blastClassification
     else:
         blastClassification = loadBlastClassification(options)
