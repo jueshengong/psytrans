@@ -1,0 +1,77 @@
+NAME
+       psytrans.py Parasite & Symbiont Transcriptome Separation
+
+SYNOPSIS
+       python psytrans.py [queries] [-H .FASTA] [-S .FASTA] [OPTIONS]
+       python psytrans.py [queries] [-b BLASTRESULTSFILE] [OPTIONS]
+
+DESCRIPTION
+       psytrans.py performs separation of the host sequences from the symbiont sequences for a queried species based on a machine learning technique called Support Vector Machine classification. 
+       Initially, a .fasta file consisting of biological sequence of the querried species (also called "queries") will have to be an input to be matched (through BLAST) against a database provided or created from the host sequence .fasta file and the symbiont sequence .fasta file. 
+       Alternatively, the output of a blast search result can be used directly via the option [-B blastoutputfile].
+       The program will then sort the queried sequences, and prepare a set of training and testing data to be used to train the machine.
+       After the SVM classification has been successfully completed, two files will be created from the queried .fasta file, with one consisting sequences that belong to the host species and the other belonging to the symbiont.
+       To ensure the script can be successfully executed, the user will need to have NCBI-BLAST+ packages, and libsvm installed in their operating system.
+  
+OPTIONS
+   Generic Program Information
+       --help Print  a  usage message briefly summarizing these command-line options and the bug-reporting address, then
+              exit.
+
+       Preparation of training set options	
+       -e, --maxBestEvalue
+	      Set the maximum value for the best e-value to be used to classify unambiguous sequences.
+
+       --trainingTestingRatio
+	      Set the value used to divide classfied sequences into testing and training sets. By default, this value is set to 2.
+
+       -n, --numberOfSeq
+	      Set the maximum number of training & testing sequences.
+
+	Kmer-map parameters
+       -c, --minWordSize
+	      Set the minimum value of DNA word length. 
+
+       -k, --maxWordSize
+	      Set the maximum value of DNA word length.
+
+	Global options
+	   -R, --restart
+	   		  Restart the script from the last checkpoint/exit stage. By default this setting is set to FALSE. To enable restart, set [-R True].
+       -V, --verbosemode
+              Runs the script in verbose mode. By default this setting is set to TRUE. For a quiet mode, set [-V FALSE]. 
+
+       -t, --tempDir
+	      Specify the name of the temporary directory to be created. By default, the name of the temporary directory is called "Temp".
+
+       -X, --clearTemp
+	      Clears all temporary data in the temporary directory upon completion.
+	      
+	   -z, --stopAfter
+	   	  Choices:['db','runBlast','parseBlast','kmers','SVM']
+	   	  This option allows the user to choose whether the process should be terminated, once the process has completed a specific
+		  stage. 
+		  db refers to the database creation stage;
+		  runBlast refers to the BLAST search stage;
+		  parseBlast refers to the separation of unambiguous and ambiguous sequence stage;
+		  kmers refers to the preparation of SVM input stage;
+		  SVM refers to the SVM training and testing stage;
+		  
+REPORTING BUGS
+       Report bugs at juesheng.ong@anu.edu.au
+
+COPYRIGHT
+       Copyright © 2014 Platform: x86_64-pc-linux-gnu (64-bit)
+
+       psytrans  is a free  software and comes with ABSOLUTELY NO WARRANTY.  You are welcome to redistribute it under the terms of the GNU General Public License
+       versions 2 or 3.  For more information about these matters see http://www.gnu.org/licenses/.
+	    
+
+       
+
+
+
+
+
+
+
