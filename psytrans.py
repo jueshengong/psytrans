@@ -380,7 +380,9 @@ def parseBlast(args, options):
             continue
         fields = line.split()
         qName  = fields[0]
+        qName  = ''.join(qName.split('>')[1:])
         hName  = fields[1]
+        hName  = ''.join(hName.split('>')[1:])
         evalue = float(fields[10])
         bitscore = float(fields[11])
         if not qName in querries:
@@ -409,6 +411,10 @@ def classifyFromBlast(querries, args):
     logging.info('Classifying using Blast results')
     trainingClassification = {}
     blastClassification    = {}
+    hostTrained    = 0
+    symbTrained    = 0
+    hostClassified = 0
+    symbClassified = 0
     for qName in querries:
         hits = querries[qName]
         hits.sort(sortHits)
@@ -429,10 +435,6 @@ def classifyFromBlast(querries, args):
                     hasZoox        = True
                     zooxBestEvalue = evalue
                     zooxBestBit   = bitscore
-        hostTrained    = 0
-        symbTrained    = 0
-        hostClassified = 0
-        symbClassified = 0
         if hasCoral and not hasZoox and coralBestEvalue <= args.maxBestEvalue:
             trainingClassification[qName] = HOST_CODE
             blastClassification[qName]    = HOST_CODE
@@ -509,7 +511,6 @@ def seqSplit(args, options, trainingClassification, blastClassification):
 
 def prepareMaps(k, maxk, kmers):
     """prepares the kmer maps for the specified kmer range."""
-    logging.info('Preparing kmer maps')
     if k == maxk:
         n        = 0
         kmer2int = {}
@@ -538,6 +539,7 @@ def computerKmers(args, path, outfile, code, mode, computeAll):
     kMin    = args.minWordSize
     kMax    = args.maxWordSize
     maps    = []
+    logging.info('Preparing kmer maps')
     for i in xrange(kMin, kMax + 1):
         maps.append(prepareMaps(0, i, ['']))
     # Initialise output
@@ -834,7 +836,7 @@ def writeOutput(args, predictions, blastClassification, fastaPath, fastaName, pr
     hostResults   = prefix1 + '_' + fastaName
     symbResults   = prefix2 + '_' + fastaName
     outputHostPath = os.path.join(args.tempDir, hostResults)
-    outputSymbPath = os.path.join(args.tempDir, symbResults), 
+    outputSymbPath = os.path.join(args.tempDir, symbResults)
     hostHandle    = open(outputHostPath, "w")
     symbHandle    = open(outputSymbPath, "w")
     j             = 0
@@ -879,7 +881,7 @@ def predictSVM(args, blastClassification, kmerTrain, kmerTest):
     kmerScale  = os.path.join(args.tempDir, fastaName + '.scaled')
     kmerPred   = os.path.join(args.tempDir, fastaName + '.pred')
     kmerFile   = os.path.join(args.tempDir, fastaName + '.kmers')
-    computerKmers(args, args.queries, kmerFile, HOST_CODE, "w", True)
+    computerKmers(args, args.queries, fastaName + '.kmers', HOST_CODE, "w", True)
     #SVM_Scale
     scaleCmd   = [svmScale,
                   '-r',
