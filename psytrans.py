@@ -857,7 +857,7 @@ def writeOutput(args, predictions, blastClassification, fastaPath, fastaName, pr
             elif blastCode == sCode:
                 symbHandle.write('>%s\n%s\n' % (name, seq))
                 j += 1
-        elif blastCode == 0:
+        if blastCode == 0:
             if predictions[j] == hCode:
                 hostHandle.write('>%s\n%s\n' % (name, seq))
                 j += 1
