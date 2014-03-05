@@ -216,7 +216,7 @@ class PsyTransOptions:
 
 def iterFasta(path):
     """Iterates over the sequences of a fasta file"""
-    logging.debug("Loading fasta files from %s" % path)
+    logging.info("Loading fasta files from %s" % path)
     name = None
     seq = []
     if path.endswith('.gz') or path.endswith('.gz"'):
@@ -246,7 +246,7 @@ def iterFasta(path):
 
 def writeDatabase(args, options, fastaPath):
     """writes multiple sources to a fasta file. This function also calls iterFasta() in the process."""
-    logging.debug('Creating Database.')
+    logging.info('Creating Database.')
     hostPath      = args.hostSeq
     symbPath      = args.symbSeq
     targetpath = open(fastaPath, 'w')
@@ -289,15 +289,16 @@ def makeDB(args, options):
 
 def splitBlastInput(args, options):
     """To split the input .fasta file into chunks for parallel BLAST search"""
-    logging.debug('Splitting sequences into %d chunks' % args.nbThreads)
+    logging.info('Splitting sequences into %d chunks' % args.nbThreads)
     chunkList = options.getChunkList()
     handles   = []
     for i in xrange(args.nbThreads):
-        handles[i] = open(chunkList[i])
+        handle = open(chunkList[i], 'w')
+        handles.append(handle)
     #writing to each chunk .fasta
     i = 0
-    for name, seq in iterFasta(blastInput):
-        handle[i % args.nbThreads].write('>%s\n%s\n' % (name, seq))
+    for name, seq in iterFasta(args.queries):
+        handles[i % args.nbThreads].write('>%s\n%s\n' % (name, seq))
         i += 1
     for i in xrange(args.nbThreads):
         handles[i].close()
@@ -315,7 +316,7 @@ def runBlast(args, options, threadId):
                 '-evalue',
                 eVal,
                 '-query',
-                options.getChunkList()[threadId]
+                options.getChunkList()[threadId],
                 '-db',
                 dbPath,
                 '-outfmt 6',
@@ -326,7 +327,6 @@ def runBlast(args, options, threadId):
     if not retCode == 0:
         logging.error('Error detected. Please check blastlogfile. Blast search not executed or exit with error.')
         sys.exit(1)
-    logging.debug('Blast finished')
 
 def mergeBlastOutput(args, options):
     logging.info('Merging Blast results into: %s ' % blastOut)
@@ -585,7 +585,7 @@ def prepareTrainingKmers(args, options, kmerTrain, kmerTest):
     """computes the kmer counts for each of the training and testing sequences.
     The function outputs two files:
     a training file and a testing file to be used as inputs for the SVM training."""
-    logging.debug('Computing kmer counts')
+    logging.info('Computing kmer counts')
     hostTrainpath = options.getHostTrainPath()
     hostTestpath  = options.getHostTestPath()
     symbTrainpath = options.getSymbTrainPath()
