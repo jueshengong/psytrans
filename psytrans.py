@@ -25,8 +25,8 @@ else:
 #######################
 #######################
 
-HOST_NAME  = 'host'
-SYMB_NAME  = 'symb'
+HOST_NAME  = 'coral'
+SYMB_NAME  = 'zoox'
 DB_NAME    = 'HostSymbDB'
 DB_FASTA   = DB_NAME + '.fasta'
 BLAST_FILE = HOST_NAME + SYMB_NAME + '_blastResults.txt'
@@ -255,12 +255,12 @@ def writeDatabase(args, options, fastaPath):
     for name, seq in iterFasta(hostPath):
         i += 1
         name = '>' + HOST_NAME +'_' + str(i)
-        targetpath.write('>%s\n%s\n' % (name, seq))
+        targetpath.write('%s\n%s\n' % (name, seq))
     j = 0
     for name, seq in iterFasta(symbPath):
         j += 1
         name = '>' + SYMB_NAME +'_' + str(j)
-        targetpath.write('>%s\n%s\n' % (name, seq))
+        targetpath.write('%s\n%s\n' % (name, seq))
     targetpath.close()
     options.createCheckPoint('writedatabase.done')
 
@@ -455,7 +455,7 @@ def classifyFromBlast(querries, args):
     logging.info('Found %d unambiguous hits' % len(trainingClassification))
     logging.info('Found %d host only hits' % hostTrained)
     logging.info('Found %d symbiont only hits' % symbTrained)
-    logging.info('Found %d likely hits' % hostClassified)
+    logging.info('Found %d likely  host hits' % hostClassified)
     logging.info('Found %d likely symbiont hits' % symbClassified)
     return trainingClassification, blastClassification
 
