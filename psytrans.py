@@ -298,7 +298,7 @@ def splitBlastInput(args, options):
     #writing to each chunk .fasta
     i = 0
     for name, seq in iterFasta(args.queries):
-        handles[i % args.nbThreads].write('>%s\n%s\n' % (name, seq))
+        handles[i % args.nbThreads].write('%s\n%s\n' % (name, seq))
         i += 1
     for i in xrange(args.nbThreads):
         handles[i].close()
@@ -380,9 +380,7 @@ def parseBlast(args, options):
             continue
         fields = line.split()
         qName  = fields[0]
-        qName  = ''.join(qName.split('>')[1:])
         hName  = fields[1]
-        hName  = ''.join(hName.split('>')[1:])
         evalue = float(fields[10])
         bitscore = float(fields[11])
         if not qName in querries:
