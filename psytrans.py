@@ -25,8 +25,8 @@ else:
 #######################
 #######################
 
-HOST_NAME  = 'coral'
-SYMB_NAME  = 'zoox'
+HOST_NAME  = 'host'
+SYMB_NAME  = 'symb'
 DB_NAME    = 'HostSymbDB'
 DB_FASTA   = DB_NAME + '.fasta'
 BLAST_FILE = HOST_NAME + SYMB_NAME + '_blastResults.txt'
@@ -283,7 +283,7 @@ def makeDB(args, options):
     makeDBCmd = ' '.join(makeDBCmd)
     submakeDB = subprocess.call(makeDBCmd, shell=True)
     if not submakeDB == 0:
-        logging.warning('Error detected. Please check logfile. Blast Database not created.')
+        logging.warning('[ERROR] Please check logfile. Blast Database not created.')
         sys.exit()
     options.createCheckPoint('makeDB.done')
 
@@ -325,7 +325,7 @@ def runBlast(args, options, threadId):
     blastCmd = ' '.join(blastCmd)
     retCode  = subprocess.call(blastCmd, shell=True)
     if not retCode == 0:
-        logging.error('Error detected. Please check blastlogfile. Blast search not executed or exit with error.')
+        logging.error('[ERROR] Please check blastlogfile. Blast search not executed or exit with an error.')
         sys.exit(1)
 
 def mergeBlastOutput(args, options):
@@ -732,7 +732,7 @@ class SVMGridWorker(threading.Thread):
                 excInfo = sys.exc_info()
                 msg     = traceback.format_exception(excInfo[0], excInfo[1], excInfo[2])
                 msg     = ''.join(msg)
-                logging.warning('Worker %s failed:' % self.name)
+                logging.warning('[WARNING] Worker %s failed:' % self.name)
                 logging.warning(msg)
                 self.jobQueue.put((c, g))
                 break
@@ -827,42 +827,36 @@ def loadBlastClassification(options):
 
 def writeOutput(args, predictions, blastClassification, fastaPath, fastaName, prefix1, prefix2):
     logging.info('Writing final output files')
-    size          = len(predictions)
-    hCode         = str(HOST_CODE)
-    sCode         = str(SYMB_CODE)
-    blastDict     = blastClassification
-    hostResults   = prefix1 + '_' + fastaName
-    symbResults   = prefix2 + '_' + fastaName
-    outputHostPath = os.path.join(args.tempDir, hostResults)
-    outputSymbPath = os.path.join(args.tempDir, symbResults)
-    hostHandle    = open(outputHostPath, "w")
-    symbHandle    = open(outputSymbPath, "w")
-    j             = 0
+    size        = len(predictions)
+    hCode       = str(HOST_CODE)
+    sCode       = str(SYMB_CODE)
+    blastDict   = blastClassification
+    hostResults = prefix1 + '_' + fastaName
+    symbResults = prefix2 + '_' + fastaName
+    hostHandle  = open(hostResults, "w")
+    symbHandle  = open(symbResults, "w")
+    j           = 0
     for name, seq in iterFasta(fastaPath):
         name      = (name.split(' ')[0])[1:]
         blastCode = blastDict.get(name, 0)
         if predictions[j] == blastCode:
             if predictions[j] == hCode:
                 hostHandle.write('>%s\n%s\n' % (name, seq)) 
-                j += 1
             elif predictions[j] == sCode:
                 symbHandle.write('>%s\n%s\n' % (name, seq))
-                j += 1
         if predictions[j] != blastCode and blastCode != 0:
             if blastCode == hCode:
                 hostHandle.write('>%s\n%s\n' % (name, seq))
-                j += 1
             elif blastCode == sCode:
                 symbHandle.write('>%s\n%s\n' % (name, seq))
-                j += 1
         if blastCode == 0:
             if predictions[j] == hCode:
                 hostHandle.write('>%s\n%s\n' % (name, seq))
-                j += 1
             elif predictions[j] == sCode:
                 symbHandle.write('>%s\n%s\n' % (name, seq))
-                j += 1
-        if not j < size:
+        j += 1
+        if j >= size:
+            logging.warning('[WARNING] Found more sequences than prediction.  This may be caused by dupplicated sequence names.')
             break
     hostHandle.close()
     symbHandle.close()
@@ -890,7 +884,7 @@ def predictSVM(args, blastClassification, kmerTrain, kmerTest):
     scaleCmd   = ' '.join(scaleCmd)
     retCode    = subprocess.call(scaleCmd, shell=True)
     if not retCode == 0:
-        logging.error('Error detected. Please check inputs. svm-scale not executed or exit with error.')
+        logging.error('[ERROR] Please check inputs. svm-scale not executed or exit with error.')
         sys.exit(1)
     #SVM_predict
     predictCmd = [svmPredict,
@@ -901,7 +895,7 @@ def predictSVM(args, blastClassification, kmerTrain, kmerTest):
     #subprocess.Popen(predictCmd, shell=True)
     retCode    = subprocess.call(predictCmd, shell=True)
     if not retCode == 0:
-        logging.error('Error detected. Please check inputs. svm-predict not executed or exit with error.')
+        logging.error('[ERROR] Please check inputs. svm-predict not executed or exit with error.')
         sys.exit(1)
     #parse_Prediction
     predictions = loadSVMPredictions(kmerPred)
@@ -1015,7 +1009,7 @@ def main():
     restart = args.restart
     if not (args.hostSeq and args.symbSeq and not args.blastResults) and \
         not (args.blastResults and not (args.hostSeq or args.symbSeq)):
-        logging.error('Either provide the host and symbiont sequences OR the output(s) of the blast results')
+        logging.error('[ERROR] Either provide the host and symbiont sequences OR the output(s) of the blast results')
         sys.exit()
     if args.verboseMode:
         logging.getLogger().setLevel(logging.DEBUG)
@@ -1032,8 +1026,8 @@ def main():
             if checkExecutable('makeblastdb'):
                 makeDB(args, options)
             else:
-                logging.warning('makeblastdb not found. Exiting')
-                sys.exit()
+                logging.error('[ERROR] makeblastdb not found. Exiting')
+                sys.exit(1)
         if args.stopAfter == 'db':
             logging.info('Stop after "db" requested, exiting now')
             sys.exit()
@@ -1042,14 +1036,14 @@ def main():
             if checkExecutable('blastx'):
                 runBlastThreads(args, options)
             else:
-                logging.warning('blastx not detected in PATH. Please check that the program is being installed correctly. Exiting')
-                sys.exit()
+                logging.error('[ERROR] blastx not found. Exiting')
+                sys.exit(1)
         if args.stopAfter == 'runBlast':
             logging.info('Stop after "runBlast" requested, exiting now')
             sys.exit()
     # Start from the user-provied blast results
     elif not os.path.exists(args.blastResults):
-        logging.error('Could not find user-provided blast results (%s). Exiting' % args.blastResults)
+        logging.error('[ERROR] Could not find user-provided blast results (%s). Exiting' % args.blastResults)
         sys.exit(1)
 
     #Step 3
@@ -1073,11 +1067,11 @@ def main():
 
     #Step 5
     if not (restart and options.checkPoint("svm.done")):
-        if checkExecutable('svm-train') and checkExecutable('svm-scale') and checkExecutable('svm-predict'):
+        if checkExecutable('svm-train') and checkExecutable('svm-scale') and checkExecutable('svm-predict'):  ### FIXME look for them only once
             doSVMEasy(args, options, kmerTrain, kmerTest)
         else:
-            logging.warning('SVM package not complete. please check that svm-train, svm-scale and svm-predict has been correctly installed')
-            sys.exit()
+            logging.error('[ERROR] Failed to find some of the libsvm commands. Make sure that svm-train, svm-scale and svm-predict are installed.')
+            sys.exit(1)
     if args.stopAfter == 'SVM':
         logging.info('Stop after "SVM" requested, exiting now')
         return

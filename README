@@ -2,76 +2,92 @@ NAME
        psytrans.py Parasite & Symbiont Transcriptome Separation
 
 SYNOPSIS
-       python psytrans.py [queries] [-H .FASTA] [-S .FASTA] [OPTIONS]
-       python psytrans.py [queries] [-b BLASTRESULTSFILE] [OPTIONS]
+       python psytrans.py [QUERIES] [-H FILE] [-S FILE] [OPTIONS]
+       python psytrans.py [QUERIES] [-b BLASTRESULTSFILE] [OPTIONS]
 
 DESCRIPTION
-       psytrans.py performs separation of the host sequences from the symbiont sequences for a queried species based on a machine learning technique called Support Vector Machine classification. 
-       Initially, a .fasta file consisting of biological sequence of the querried species (also called "queries") will have to be an input to be matched (through BLAST) against a database provided or created from the host sequence .fasta file and the symbiont sequence .fasta file. 
-       Alternatively, the output of a blast search result can be used directly via the option [-B blastoutputfile].
-       The program will then sort the queried sequences, and prepare a set of training and testing data to be used to train the machine.
-       After the SVM classification has been successfully completed, two files will be created from the queried .fasta file, with one consisting sequences that belong to the host species and the other belonging to the symbiont.
-       To ensure the script can be successfully executed, the user will need to have NCBI-BLAST+ packages, and libsvm installed in their operating system.
-  
+       psytrans.py separates the sequences of a host species from those of its main symbiont(s) or parasite(s) based on Support Vector Machine classification.
+       The program takes as input a file in fasta format with the sequences to be classified.
+       The program also requires a file with sequences of a species related to the host, and a file with sequences related to the symbiont (or parasite).
+       The queries will be compared to these two files using BLASTX.
+       Alternatively, the user can provide the output of pre-computed BLASTX searches (in tabular format: -outfmt 6 or 7).
+       The classification is then carried out using the command line tools from libsvm.
+
+DEPENDENCIES
+       psytrans requires makeblastdb and blastx from the NCBI blast+ distribution, unless the user provides pre-computed blast results.
+       psytrans also requires a few command line utilities from libsvm: svm-scale, svm-train and svm-predict
+
 OPTIONS
    Generic Program Information
-       --help Print  a  usage message briefly summarizing these command-line options and the bug-reporting address, then
-              exit.
 
-       Preparation of training set options	
-       -e, --maxBestEvalue
-	      Set the maximum value for the best e-value to be used to classify unambiguous sequences.
+       -h, --help
+              Print a usage message briefly summarizing the command-line options.
 
-       --trainingTestingRatio
-	      Set the value used to divide classfied sequences into testing and training sets. By default, this value is set to 2.
+   Global options
 
-       -n, --numberOfSeq
-	      Set the maximum number of training & testing sequences.
+       -R, --restart
+              Restart the script from the last checkpoint.
 
-	Kmer-map parameters
-       -c, --minWordSize
-	      Set the minimum value of DNA word length. 
+       -p, --nbThreads
+              Number of threads to use for the blast searches and for the SVM training.
 
-       -k, --maxWordSize
-	      Set the maximum value of DNA word length.
-
-	Global options
-	   -R, --restart
-	   		  Restart the script from the last checkpoint/exit stage. By default this setting is set to FALSE. To enable restart, set [-R True].
        -V, --verbosemode
-              Runs the script in verbose mode. By default this setting is set to TRUE. For a quiet mode, set [-V FALSE]. 
+              Runs the script in verbose mode.
 
        -t, --tempDir
-	      Specify the name of the temporary directory to be created. By default, the name of the temporary directory is called "Temp".
+              Specify the name of the temporary directory.
 
        -X, --clearTemp
-	      Clears all temporary data in the temporary directory upon completion.
-	      
-	   -z, --stopAfter
-	   	  Choices:['db','runBlast','parseBlast','kmers','SVM']
-	   	  This option allows the user to choose whether the process should be terminated, once the process has completed a specific
-		  stage. 
-		  db refers to the database creation stage;
-		  runBlast refers to the BLAST search stage;
-		  parseBlast refers to the separation of unambiguous and ambiguous sequence stage;
-		  kmers refers to the preparation of SVM input stage;
-		  SVM refers to the SVM training and testing stage;
-		  
+              Clears all temporary data in the temporary directory upon completion.
+
+       -z, --stopAfter
+              Choices:['db','runBlast','parseBlast','kmers','SVM']
+              This option allows the user to choose whether the process should stop, once the process has completed a specific stage.
+              db refers to the database creation stage;
+              runBlast refers to the BLAST search stage;
+              parseBlast refers to the separation of unambiguous and ambiguous sequence stage;
+              kmers refers to the preparation of SVM input stage;
+              SVM refers to the SVM training and testing stage.
+
+   Preparation of training set options
+
+       -e, --maxBestEvalue
+              Set the maximum value for the best e-value to be used to classify unambiguous sequences.
+
+       -n, --numberOfSeq
+              Set the maximum number of training & testing sequences.
+
+   Kmer parameters
+
+       -c, --minWordSize
+              Set the minimum value of DNA word length.
+
+       -k, --maxWordSize
+              Set the maximum value of DNA word length.
+
+EXAMPLE
+       You start with an assembly containing a mixture of sequences from a host A and a symbiont (or parasite) B: host_and_symb.fasta
+       You also provide a file with proteins from a species related to the host: related_host_proteins.fasta
+       and a file with proteins from a species related to the symbiont: related_symb_proteins.fasta
+       You can then start the Psytrans process as follows:
+
+              python psytrans.py host_and_symb.fasta  -H related_host_proteins.fasta -S related_symb_proteins.fasta
+
+       Wait a few hours (depending on the number of sequences), and in the current directory you will find a new file starting with the prefix `host_' and another file starting with the prefix `symb_', corresponding to the sequences classified as host or symbiont (or parasite) respectively.
+
+       To run the program using 8 threads and using /home/user/tmp as a temporary directory, use the following command:
+
+              python psytrans.py host_and_symb.fasta  -H related_host_proteins.fasta -S related_symb_proteins.fasta -p 8 -t /home/user/tmp
+
+AUTHOR
+       Written by Sylvain Forêt and Jue-Sheng Ong.
+
 REPORTING BUGS
-       Report bugs at juesheng.ong@anu.edu.au
+       Report bugs at sylvain.foret@anu.edu.au
+       Psytrans repository <https://github.com/sylvainforet/psytrans>
 
 COPYRIGHT
-       Copyright © 2014 Platform: x86_64-pc-linux-gnu (64-bit)
+       Copyright © 2014 Sylvain Forêt & Jue-Sheng Ong.
 
        psytrans  is a free  software and comes with ABSOLUTELY NO WARRANTY.  You are welcome to redistribute it under the terms of the GNU General Public License
-       versions 2 or 3.  For more information about these matters see http://www.gnu.org/licenses/.
-	    
-
-       
-
-
-
-
-
-
-
+       versions 3 or later.  For more information about these matters see http://www.gnu.org/licenses/.
