@@ -25,8 +25,8 @@ else:
 #######################
 #######################
 
-HOST_NAME  = 'coral'
-SYMB_NAME  = 'zoox'
+HOST_NAME  = 'host'
+SYMB_NAME  = 'symb'
 DB_NAME    = 'HostSymbDB'
 DB_FASTA   = DB_NAME + '.fasta'
 BLAST_FILE = HOST_NAME + SYMB_NAME + '_blastResults.txt'
