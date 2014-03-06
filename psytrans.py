@@ -1077,11 +1077,8 @@ def main():
         return
 
     #Step 6
-    if not restart:
-        blastClassification = blastClassification
-    else:
-        blastClassification = loadBlastClassification(options)
 
+    blastClassification = loadBlastClassification(options)
     predictSVM(args, blastClassification, kmerTrain, kmerTest)
     logging.info("SVM classification completed successfully.")
 
