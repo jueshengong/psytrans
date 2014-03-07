@@ -477,7 +477,7 @@ def seqSplit(args, options, trainingClassification, blastClassification):
     symbTest  = open(options.getSymbTestPath(), 'w')
     blastSort = open(options.getBlastSortPath(), 'w')
     for name, seq in iterFasta(args.queries):
-        identity = identity = (name.split(' ')[0])[1:]
+        identity = identity = (name.split(' ')[0])
         seqClass = trainingClassification.get(identity, 0)
         if seqClass == HOST_CODE:
             if m % 2 == 0:
@@ -597,10 +597,10 @@ def prepareTrainingKmers(args, options, kmerTrain, kmerTest):
     hostTestPath  = options.getHostTestPath()
     symbTrainPath = options.getSymbTrainPath()
     symbTestPath  = options.getSymbTestPath()
-    computerKmers(args, hostTrainpath, kmerTrain, HOST_CODE, "w", False)
-    computerKmers(args, hostTestpath, kmerTest, HOST_CODE, "w", False)
-    computerKmers(args, symbTrainpath, kmerTrain, SYMB_CODE, "a", False)
-    computerKmers(args, symbTestpath, kmerTest, SYMB_CODE, "a", False)
+    computerKmers(args, hostTrainPath, kmerTrain, HOST_CODE, "w", False)
+    computerKmers(args, hostTestPath, kmerTest, HOST_CODE, "w", False)
+    computerKmers(args, symbTrainPath, kmerTrain, SYMB_CODE, "a", False)
+    computerKmers(args, symbTestPath, kmerTest, SYMB_CODE, "a", False)
     options.createCheckPoint('kmers.done')
 
 ##################################################################
