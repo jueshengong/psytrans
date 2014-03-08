@@ -50,7 +50,7 @@ HOST_TRAINING = HOST_NAME + '_training.fasta'
 HOST_TESTING  = HOST_NAME + '_testing.fasta'
 SYMB_TRAINING = SYMB_NAME + '_training.fasta'
 SYMB_TESTING  = SYMB_NAME + '_testing.fasta'
-LIBSVM_DIR    = 'libsvm'
+BINARIES_DIR    = 'binaries'
 
 LETTERS = ('A', 'T', 'G', 'C')
 
@@ -265,19 +265,20 @@ def writeDatabase(args, options, fastaPath):
 def makeDB(args, options):
     """Build the blast database in the temporary folder"""
 
-    dbPath    = options.getDbPath()
-    fastaPath = options.getFastaDbPath()
-    logPath   = dbPath + '.log'
-    makeDBCmd = ['makeblastdb',
-                 '-title',
-                 DB_NAME,
-                 '-in',
-                 fastaPath,
-                 '-dbtype prot', ### TODO enable tblastx in the future
-                 '-out ',
-                 dbPath,
-                 '-logfile',
-                 logPath]
+    dbPath      = options.getDbPath()
+    fastaPath   = options.getFastaDbPath()
+    logPath     = dbPath + '.log'
+    makeblastdb = checkExecutable('makeblastdb')
+    makeDBCmd   = [makeblastdb,
+                  '-title',
+                  DB_NAME,
+                  '-in',
+                  fastaPath,
+                  '-dbtype prot', ### TODO enable tblastx in the future
+                  '-out ',
+                  dbPath,
+                  '-logfile',
+                  logPath]
     makeDBCmd = ' '.join(makeDBCmd)
     submakeDB = subprocess.call(makeDBCmd, shell=True)
     if not submakeDB == 0:
@@ -311,7 +312,8 @@ def runBlast(args, options, threadId):
     eVal         = '%.2e' % args.maxBestEvalue
     dbPath       = options.getDbPath()
     blastOutput  = options.getThreadBlastList()[threadId]
-    blastCmd     = ['blastx',
+    blastx       = checkExecutable('blastx')
+    blastCmd     = [blastx,
                     '-evalue',
                     eVal,
                     '-query',
@@ -942,7 +944,7 @@ def checkExecutable(program):
             return exe
     # Then check in the subdirectory
     root = os.path.dirname(os.path.abspath(sys.argv[0]))
-    exe  = os.path.join(root, LIBSVM_DIR, program)
+    exe  = os.path.join(root, BINARIES_DIR, program)
     if os.path.exists(exe) and os.access(exe, os.X_OK):
         return exe
 
