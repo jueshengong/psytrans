@@ -479,7 +479,7 @@ def seqSplit(args, options, trainingClassification, blastClassification):
     symbTest  = open(options.getSymbTestPath(), 'w')
     blastSort = open(options.getBlastSortPath(), 'w')
     for name, seq in iterFasta(args.queries):
-        identity = identity = (name.split(' ')[0])
+        identity = (name.split(' ')[0])
         seqClass = trainingClassification.get(identity, 0)
         if seqClass == HOST_CODE:
             if m % 2 == 0:
@@ -858,8 +858,9 @@ def writeOutput(args, predictions, blastClassification, fastaPath, fastaName, pr
     hostHandle  = open(hostResults, "w")
     symbHandle  = open(symbResults, "w")
     j           = 0
+    p           = 0
     for name, seq in iterFasta(fastaPath):
-        name      = (name.split(' ')[0])[1:]
+        name      = (name.split(' ')[0])
         blastCode = blastDict.get(name, 0)
         if predictions[j] == blastCode:
             if predictions[j] == hCode:
@@ -867,6 +868,7 @@ def writeOutput(args, predictions, blastClassification, fastaPath, fastaName, pr
             elif predictions[j] == sCode:
                 symbHandle.write('>%s\n%s\n' % (name, seq))
         if predictions[j] != blastCode and blastCode != 0:
+            p += 1
             if blastCode == hCode:
                 hostHandle.write('>%s\n%s\n' % (name, seq))
             elif blastCode == sCode:
@@ -880,6 +882,7 @@ def writeOutput(args, predictions, blastClassification, fastaPath, fastaName, pr
         if j >= size:
             logging.warning('[WARNING] Found more sequences than prediction.  This may be caused by dupplicated sequence names.')
             break
+    logging.info('Found %d contradicting results between blast Classification and SVM prediction.' % p)
     hostHandle.close()
     symbHandle.close()
 
@@ -1033,9 +1036,18 @@ def mainArgs():
 def main():
     """Banzai !!!"""
 
-    logging.basicConfig(level=logging.INFO, format=("%(asctime)s - %(funcName)s - %(message)s"))
     args    = mainArgs()
     options = PsyTransOptions(args)
+    logName = options._getSuffix()
+    logName = logName + '_psytrans.py'
+    logging.basicConfig(level=logging.DEBUG, format=("%(asctime)s - %(funcName)s - %(message)s"), filename=logName, filemode='w')
+    
+    console = logging.StreamHandler()
+    console.setLevel(logging.INFO)
+    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(funcName)s - %(message)s")
+    console.setFormatter(formatter)
+    logging.getLogger('').addHandler(console)
+    
     restart = args.restart
     if not (args.hostSeq and args.symbSeq and not args.blastResults) and \
         not (args.blastResults and not (args.hostSeq or args.symbSeq)):
