@@ -11,7 +11,6 @@ import shutil
 import os
 import threading
 import traceback
-import random
 
 if(sys.hexversion < 0x03000000):
     import Queue
@@ -236,18 +235,6 @@ def iterFasta(path):
     if name:
         yield (name, ''.join(seq))
     handle.close()
-
-def seqCount(path):
-    """Counts the number of sequences of a fasta file"""
-    c = 0
-    if path.endswith('.gz') or path.endswith('.gz"'):
-        handle = gzip.open(path)
-    else:
-        handle = open(path)
-    for line in handle:
-        if line.startswith(">"): 
-            c += 1
-    return c
 
 #####################################
 #####################################
@@ -549,14 +536,8 @@ def computerKmers(args, path, outfile, code, mode, computeAll):
     label = int(code)
     if computeAll:
         length = 0
-        randList = []
     else:
         length = args.numberOfSeq
-        #Check fasta size and create sorted random sequence list
-        sCounts = seqCount(path)
-        randList = random.sample(xrange(sCounts), length)
-        randList.sort()
-        randList = dict.fromkeys(randList)
     # Prepare all maps
     kMin    = args.minWordSize
     kMax    = args.maxWordSize
@@ -573,14 +554,12 @@ def computerKmers(args, path, outfile, code, mode, computeAll):
     for i in xrange(kMin, kMax + 1):
         counts[i] = array.array('d', [0 for x in xrange(4 ** i)])
     # Iterate over sequences
-    nSeqs    = 0
-    position = 0
+    nSeqs   = 0
+    randList = sort(random.sample(
     for name, seq in iterFasta(path):
         if length > 0 and nSeqs >= length:
             break
-        if not position in randList and not computeAll:
-            position += 1
-            continue
+        
         size   = len(seq)
         n      = 0
         handle.write('%d' % label)
@@ -603,14 +582,12 @@ def computerKmers(args, path, outfile, code, mode, computeAll):
                 if j != 0:
                     handle.write(' %d:%.3e' % (n, j))
         handle.write('\n')
+        nSeqs += 1
         # Reset counts
         for i in xrange(kMin, kMax + 1):
             for j in xrange(len(counts[i])):
                 counts[i][j] = 0
-        nSeqs    += 1
-        position += 1
     # Trace
-    logging.info('Randomly sampled %d sequences from %d total sequences' % (nSeqs, position))
     logging.info('Processed %d sequences' % nSeqs)
     handle.close()
 
