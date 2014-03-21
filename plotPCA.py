@@ -13,6 +13,7 @@ from numpy.testing import assert_array_almost_equal
 import statsmodels.api as sm
 from statsmodels.sandbox.tools import pca
 from matplotlib import pyplot as plt
+from matplotlib.colors import LogNorm
 
 #from statsmodels.sandbox.tools.cross_val import LeaveOneOut
 
@@ -26,6 +27,7 @@ from matplotlib import pyplot as plt
 
 HOST_CODE  = 1
 SYMB_CODE  = 2
+NBINS      = 50
 
 BINARIES_DIR    = 'binaries'
 
@@ -187,14 +189,47 @@ def computerKmers(args, path, label):
 
 
 def doPCA(dataMatrix):
-    a,b,c,d= pca(dataMatrix, keepdim=2, normalize=True, demean=True)
-    return a,b,c,d
+    logging.info('Computing PCA')
+    a, b, c, d = pca(dataMatrix, keepdim=2, normalize=True, demean=True)
+    return a, b, c, d
+
+
+def plotDensityPCA(args, pcaMatrix):
+    outName = args.outputFileName
+    outName = outName + '_PCAdensity_' + str(NBINS)
+    pcaXCoord = numpy.hsplit(pcaMatrix, [1])[0]
+    pcaXCoord = pcaXCoord.reshape(1, len(pcaXCoord))[0]
+    pcaXCoord = pcaXCoord.real
+    pcaYCoord = numpy.hsplit(pcaMatrix, [1])[1]
+    pcaYCoord = pcaYCoord.reshape(1, len(pcaYCoord))[0]
+    pcaYCoord = pcaYCoord.real
+    #fig2.set_title('Density plot of main PCA components')
+    H, edgeX, edgeY = numpy.histogram2d(pcaXCoord, pcaYCoord, bins = NBINS)
+    H = numpy.rot90(H)
+    H = numpy.flipud(H)
+    # mask zeroes
+    maskedH = numpy.ma.masked_where(H==0, H)
+    #Plot the histogram
+    fig2 = matplotlib.pyplot.figure()
+    plt.pcolormesh(edgeX, edgeY, maskedH)
+    plt.xlabel('Pricinpal Component 1')
+    plt.ylabel('Principal Component 2') 
+    cbar = plt.colorbar()
+    cbar.ax.set_ylabel('Counts')
+    fig2.savefig(outName, format='png')
+    #show()
+    return fig2
 
 	    
 def plotPCA(args, kmerMatrix, labelList):
-    xreduced, factors, evals, evecs = pca(kmerMatrix.T, keepdim=2, normalize=True, demean=True)
+    xreduced, factors, evals, evecs = doPCA(kmerMatrix.T)
+    logging.info('plotting PCA')
     pcaMatrix = evecs
-    fig = matplotlib.pyplot.figure()
+    for i in xrange(len(pcaMatrix)):
+        for j in xrange(len(pcaMatrix[0])):
+            pcaMatrix[i, j] = float(pcaMatrix[i, j].real)
+            
+    fig = matplotlib.pyplot.figure(1)
     ax  = fig.add_subplot(111)
     ax.set_xlabel('Principal Component 1')
     ax.set_ylabel('Principal Component 2')
@@ -208,8 +243,11 @@ def plotPCA(args, kmerMatrix, labelList):
     		plt.scatter(xpoint, ypoint, color = 'red')
 
     fig.savefig(args.outputFileName, format='png')
+    fig2 = plotDensityPCA(args, pcaMatrix)
+    #fig.show()
+    #fig2.show()
     matplotlib.pyplot.show()   
-
+    
     
 def checkExecutable(program):
     """Check whether a program is installed and executable"""
@@ -278,6 +316,7 @@ def main():
     
     kmerData = numpy.vstack([hostKmer, symbKmer])
     seqList  = numpy.hstack([hostList, symbList])
+    logging.info('kmer Matrix created. preparing PCA') 
     plotPCA(args, kmerData, seqList)
     #blastClassification = loadBlastClassification(options)
     #predictSVM(args, blastClassification, kmerTrain, kmerTest)
@@ -287,6 +326,5 @@ def main():
 if __name__ == '__main__':
     main()
 # vim:ts=4:sw=4:sts=4:et:ai:
-
 
 

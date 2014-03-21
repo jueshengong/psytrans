@@ -214,7 +214,6 @@ class PsyTransOptions:
 
 def iterFasta(path):
     """Iterates over the sequences of a fasta file"""
-
     logging.info("Loading fasta files from %s" % path)
     name = None
     seq = []
@@ -504,7 +503,6 @@ def seqSplit(args, options, trainingClassification, blastClassification):
     blastSort.close()
     options.createCheckPoint('parseBlast.done')
 
-
 ############################
 ############################
 ### Compute Kmer vectors ###
@@ -557,9 +555,11 @@ def computerKmers(args, path, outfile, code, mode, computeAll):
         counts[i] = array.array('d', [0 for x in xrange(4 ** i)])
     # Iterate over sequences
     nSeqs   = 0
+    randList = sort(random.sample(
     for name, seq in iterFasta(path):
         if length > 0 and nSeqs >= length:
             break
+        
         size   = len(seq)
         n      = 0
         handle.write('%d' % label)
@@ -570,7 +570,9 @@ def computerKmers(args, path, outfile, code, mode, computeAll):
             for j in xrange(size - i + 1):
                 word = seq[j:j + i]
                 kMap = maps[i - kMin]
-                idx  = kMap[word]
+                idx  = kMap.get(word,None)
+                if idx is None:
+                    continue
                 kCounts[idx] += 1
             kCountsSum = sum(kCounts)
             for j in xrange(len(kCounts)):
@@ -626,6 +628,7 @@ def doSVMEasy(args, options, kmerTrain, kmerTest):
     rangeFile       = kmerTrain + '.range'
     scaledTestFile  = kmerTest  + '.scale'
     predictTestFile = kmerTest  + '.predict'
+    resultLog       = kmerTrain + '_accuracy.log'
     cmdScale        = [svmScale,
                        '-s',
                        rangeFile,
@@ -652,12 +655,17 @@ def doSVMEasy(args, options, kmerTrain, kmerTest):
                        scaledTestFile]
     cmdScale        = ' '.join(cmdScale)
     subprocess.call(cmdScale, shell=True)
+    resultHandle    = open(resultLog, 'w')
     cmdPredict      = [svmPredict,
                        scaledTestFile,
                        modelFile,
                        predictTestFile]
     cmdPredict      = ' '.join(cmdPredict)
-    subprocess.call(cmdPredict, shell=True)
+    subprocess.call(cmdPredict, shell=True, stdout = resultHandle)
+    #Adding classification-result to logger
+    for line in open(resultLog, 'r'):
+        if line.startswith('Accuracy'):
+            logging.info('Summary: %s' % line)
     logging.info('Prediction in: %s' % predictTestFile)
     options.createCheckPoint('svm.done')
 
@@ -879,7 +887,7 @@ def writeOutput(args, predictions, blastClassification, fastaPath, fastaName, pr
             elif predictions[j] == sCode:
                 symbHandle.write('>%s\n%s\n' % (name, seq))
         j += 1
-        if j >= size:
+        if j > size:
             logging.warning('[WARNING] Found more sequences than prediction.  This may be caused by dupplicated sequence names.')
             break
     logging.info('Found %d contradicting results between blast Classification and SVM prediction.' % p)
@@ -1039,7 +1047,7 @@ def main():
     args    = mainArgs()
     options = PsyTransOptions(args)
     logName = options._getSuffix()
-    logName = logName + '_psytrans.py'
+    logName = logName + '_psytrans.log'
     logging.basicConfig(level=logging.DEBUG, format=("%(asctime)s - %(funcName)s - %(message)s"), filename=logName, filemode='w')
     
     console = logging.StreamHandler()
