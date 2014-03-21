@@ -2,7 +2,7 @@
 
 #################################################################################
 #################################################################################
-############PSYTRANS V2.0 Using Reverse Complementary Strand for SVM Training####
+############PSYTRANS V3.0 Using Reverse Complementary Strand for SVM Training####
 #################################################################################
 #################################################################################
 
@@ -17,6 +17,7 @@ import shutil
 import os
 import threading
 import traceback
+import random
 
 if(sys.hexversion < 0x03000000):
     import Queue
