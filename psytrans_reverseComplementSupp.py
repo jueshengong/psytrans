@@ -1,5 +1,11 @@
 #!/usr/bin/env python
 
+#################################################################################
+#################################################################################
+############PSYTRANS V2.0 Using Reverse Complementary Strand for SVM Training####
+#################################################################################
+#################################################################################
+
 import argparse
 import array
 import gzip
@@ -11,7 +17,6 @@ import shutil
 import os
 import threading
 import traceback
-import random
 
 if(sys.hexversion < 0x03000000):
     import Queue
@@ -228,13 +233,13 @@ def iterFasta(path):
             continue
         if line.startswith(">"):
             if name:
-                yield (name, ''.join(seq))
+                yield (name, ''.join(i for i in seq if i.isalpha()))
             name = line[1:]
             seq = []
         else:
             seq.append(line)
     if name:
-        yield (name, ''.join(seq))
+        yield (name, ''.join(i for i in seq if i.isalpha()))
     handle.close()
 
 def seqCount(path):
@@ -248,7 +253,7 @@ def seqCount(path):
         if line.startswith(">"): 
             c += 1
     return c
-
+    
 #####################################
 #####################################
 ### Make training set using BLAST ###
@@ -515,6 +520,7 @@ def seqSplit(args, options, trainingClassification, blastClassification):
     symbTrain.close()
     blastSort.close()
     options.createCheckPoint('parseBlast.done')
+
 
 ############################
 ############################
