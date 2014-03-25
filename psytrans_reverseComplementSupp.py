@@ -19,6 +19,7 @@ import threading
 import traceback
 import random
 
+random.seed(1)
 if(sys.hexversion < 0x03000000):
     import Queue
 else:
@@ -599,12 +600,15 @@ def computerKmers(args, path, outfile, code, mode, computeAll):
             kCounts  = counts[i]
             # For word in the sequence
             for j in xrange(size - i + 1):
-                word = seqC[j:j + i]
-                kMap = maps[i - kMin]
-                idx  = kMap.get(word,None)
+                word  = seq[j:j + i]
+                wordC = seqC[j:j + i]
+                kMap  = maps[i - kMin]
+                idx   = kMap.get(word,None)
+                idxC  = kMap.get(wordC,None)
                 if idx is None:
                     continue
-                kCounts[idx] += 1
+                kCounts[idx]  += 1
+                kCounts[idxC] += 1
             kCountsSum = sum(kCounts)
             for j in xrange(len(kCounts)):
                 kCounts[j] /= kCountsSum
