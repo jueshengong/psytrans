@@ -13,6 +13,8 @@ import threading
 import traceback
 import random
 
+random.seed(1)
+
 if(sys.hexversion < 0x03000000):
     import Queue
 else:
