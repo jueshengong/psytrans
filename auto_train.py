@@ -228,7 +228,9 @@ def computeKmerMat(args, full=False):
             for j in xrange(size - i + 1):
                 word = seq[j:j + i]
                 kMap = maps[i - kMin]
-                idx  = kMap[word]
+                idx  = kMap.get(word,None)
+                if idx is None:
+                    continue
                 kCounts[idx] += 1
             kCountsSum = sum(kCounts)
             for j in xrange(len(kCounts)):
