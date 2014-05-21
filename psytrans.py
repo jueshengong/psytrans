@@ -656,7 +656,7 @@ def computerKmers(args, path, outfile, code, sLength, mode, computeAll):
                 kMap  = maps[i - kMin]
                 idx   = kMap.get(word,None)
                 idxC  = kMap.get(wordC,None)
-                if idx is None:
+                if idx is None or idxC is None:
                     continue
                 kCounts[idx]  += 1
                 kCounts[idxC] += 1

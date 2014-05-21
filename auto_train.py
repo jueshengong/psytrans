@@ -222,16 +222,23 @@ def computeKmerMat(args, full=False):
         n      = 0
         #handle.write('%d' % label)
         # For each kmer value
+        # Obtain Reverse complementary strand
+        seqC = seq[::-1]
+        seqC = seqC.replace('A','3').replace('C','4').replace('G','C').replace('T','A').replace('3','T').replace('4','G')
+        # For each kmer value
         for i in xrange(kMin, kMax + 1):
             kCounts  = counts[i]
             # For word in the sequence
             for j in xrange(size - i + 1):
-                word = seq[j:j + i]
-                kMap = maps[i - kMin]
-                idx  = kMap.get(word,None)
-                if idx is None:
+                word  = seq[j:j + i]
+                wordC = seqC[j:j + i]
+                kMap  = maps[i - kMin]
+                idx   = kMap.get(word,None)
+                idxC  = kMap.get(wordC,None)
+                if idx is None or idxC is None:
                     continue
-                kCounts[idx] += 1
+                kCounts[idx]  += 1
+                kCounts[idxC] += 1
             kCountsSum = sum(kCounts)
             for j in xrange(len(kCounts)):
                 kCounts[j] /= kCountsSum
@@ -844,7 +851,7 @@ def main():
     projected = runPCA(args, trainMatrix, 2)
     plotDensityPCA(args, projected, 1, 2, 1)
     logging.info('performing PCA Auto-training') 
-    autoTrainPCA(args, CONF_LEVEL, projected, sampledList, 80)
+    autoTrainPCA(args, CONF_LEVEL, projected, sampledList, 50)
     
     logging.info("Auto-Training completed successfully.")
 
