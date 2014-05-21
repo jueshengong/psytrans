@@ -546,7 +546,7 @@ def seqSplit(args, options, trainingClassification, blastClassification):
     for name, seq in iterFasta(args.queries):
         identity = (name.split(' ')[0])
         seqClass = trainingClassification.get(identity, 0)
-        if seqClass == HO:
+        if seqClass == HOST_CODE:
             if m < length:
                 hostTrain.write('>%s\n%s\n' % (identity, seq))
             else :
@@ -555,12 +555,12 @@ def seqSplit(args, options, trainingClassification, blastClassification):
     for name, seq in iterFasta(args.queries):
         identity = (name.split(' ')[0])
         seqClass = trainingClassification.get(identity, 0)
-        if seqClass == HO:
-            if m < length:
-                hostTrain.write('>%s\n%s\n' % (identity, seq))
+        if seqClass == SYMB_CODE:
+            if j < length:
+                symbTrain.write('>%s\n%s\n' % (identity, seq))
             else :
-                hostTest.write('>%s\n%s\n' % (identity, seq))
-            m += 1        
+                symbTest.write('>%s\n%s\n' % (identity, seq))
+            j += 1        
     for blastId in blastClassification:
         blastCode = blastClassification[blastId]
         blastSort.write('%s\t%d\n' % (blastId, blastCode))
