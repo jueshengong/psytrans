@@ -33,8 +33,8 @@ else:
 ########################
 ########################
 
-HOST_NAME  = 'Mollusca'
-SYMB_NAME  = 'Non_Mollusca'
+HOST_NAME  = 'host'
+SYMB_NAME  = 'symb'
 DB_NAME    = 'HostSymbDB'
 DB_FASTA   = DB_NAME + '.fasta'
 BLAST_FILE = HOST_NAME + SYMB_NAME + '_blastResults.txt'
