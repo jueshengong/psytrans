@@ -33,8 +33,8 @@ else:
 ########################
 ########################
 
-HOST_NAME  = 'host'
-SYMB_NAME  = 'symb'
+HOST_NAME  = 'Mollusca'
+SYMB_NAME  = 'Non_Mollusca'
 DB_NAME    = 'HostSymbDB'
 DB_FASTA   = DB_NAME + '.fasta'
 BLAST_FILE = HOST_NAME + SYMB_NAME + '_blastResults.txt'
@@ -499,9 +499,15 @@ def trainingSplit(args, options, hCode, sCode):
     symbTrain = open(options.getSymbTrainPath(), 'w')
     symbTest  = open(options.getSymbTestPath(), 'w')
     blastSort = open(options.getBlastSortPath(), 'w')
+    spec1size = seqCount(args.species1) 
+    spec2size = seqCount(args.species2)
+    rand1List = random.sample(xrange(spec1size), length)
+    rand2List = random.sample(xrange(spec2size), length)
+    rand1List.sort()
+    rand2List.sort()    
     for name, seq in iterFasta(args.species1):
         identity = (name.split(' ')[0])
-        if m < length:
+        if m in rand1List:
             hostTrain.write('>%s\n%s\n' % (identity, seq))
         else :
             hostTest.write('>%s\n%s\n' % (identity, seq))
@@ -510,7 +516,7 @@ def trainingSplit(args, options, hCode, sCode):
         m += 1 
     for name, seq in iterFasta(args.species2):
         identity = (name.split(' ')[0])
-        if j < length:
+        if j in rand2List:
             symbTrain.write('>%s\n%s\n' % (identity, seq))
         else :
             symbTest.write('>%s\n%s\n' % (identity, seq))
