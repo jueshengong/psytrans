@@ -20,7 +20,7 @@ import traceback
 import math
 import random
 
-random.seed(1)
+random.seed(1234)
 if(sys.hexversion < 0x03000000):
     import Queue
 else:
@@ -491,7 +491,9 @@ def trainingSplit(args, options, hCode, sCode):
 
     logging.info('Splitting training and testing sequences')
     m = 0
+    n = 0
     j = 0
+    k = 0
     length = args.numberOfSeq
     handle    = open(args.queries)
     hostTrain = open(options.getHostTrainPath(), 'w')
@@ -501,23 +503,24 @@ def trainingSplit(args, options, hCode, sCode):
     blastSort = open(options.getBlastSortPath(), 'w')
     spec1size = seqCount(args.species1) 
     spec2size = seqCount(args.species2)
-    rand1List = random.sample(xrange(spec1size), length)
-    rand2List = random.sample(xrange(spec2size), length)
+    rand1List = random.sample(xrange(spec1size), min(length*4,spec1size))
+    rand2List = random.sample(xrange(spec2size), min(length*4,spec2size))
     rand1List.sort()
     rand2List.sort()    
     for name, seq in iterFasta(args.species1):
         identity = (name.split(' ')[0])
-        if m in rand1List:
+        if m in rand1List and n < length:
             hostTrain.write('>%s\n%s\n' % (identity, seq))
+            n += 1
         else :
             hostTest.write('>%s\n%s\n' % (identity, seq))
-        
         blastSort.write('%s\t%d\n' %(identity, hCode))
         m += 1 
     for name, seq in iterFasta(args.species2):
         identity = (name.split(' ')[0])
-        if j in rand2List:
+        if j in rand2List and k < length:
             symbTrain.write('>%s\n%s\n' % (identity, seq))
+            k += 1
         else :
             symbTest.write('>%s\n%s\n' % (identity, seq))
         blastSort.write('%s\t%d\n' %(identity, sCode))
@@ -539,8 +542,11 @@ def seqSplit(args, options, trainingClassification, blastClassification):
 
     logging.info('Splitting training and testing sequences')
     m = 0
+    n = 0
     j = 0
+    k = 0
     length = args.numberOfSeq
+    minSeqSize = args.minSeqSize
     handle    = open(args.queries)
     spec1Path = args.species1
     spec2Path = args.species2
@@ -550,18 +556,26 @@ def seqSplit(args, options, trainingClassification, blastClassification):
     symbTest  = open(options.getSymbTestPath(), 'w')
     blastSort = open(options.getBlastSortPath(), 'w')
     for name, seq in iterFasta(args.queries):
+        size = len(seq)
         identity = (name.split(' ')[0])
         seqClass = trainingClassification.get(identity, 0)
         if seqClass == HOST_CODE:
+            if size < minSeqSize:
+                n += 1
+                continue
             if m < length:
                 hostTrain.write('>%s\n%s\n' % (identity, seq))
             else :
                 hostTest.write('>%s\n%s\n' % (identity, seq))
             m += 1
     for name, seq in iterFasta(args.queries):
+        size = len(seq)
         identity = (name.split(' ')[0])
         seqClass = trainingClassification.get(identity, 0)
         if seqClass == SYMB_CODE:
+            if size < minSeqSize:
+                k += 1
+                continue
             if j < length:
                 symbTrain.write('>%s\n%s\n' % (identity, seq))
             else :
@@ -570,12 +584,14 @@ def seqSplit(args, options, trainingClassification, blastClassification):
     for blastId in blastClassification:
         blastCode = blastClassification[blastId]
         blastSort.write('%s\t%d\n' % (blastId, blastCode))
+    total = n+k
     handle.close()
     hostTest.close()
     hostTrain.close()
     symbTest.close()
     symbTrain.close()
     blastSort.close()
+    logging.info('%d training sequences are not parsed due to failure to satisfy minimum seq size requirement.'  %total)
     options.createCheckPoint('parseBlast.done')
 
 ############################
@@ -644,28 +660,33 @@ def computerKmers(args, path, outfile, code, sLength, mode, computeAll):
         size = len(seq)
         if length > 0 and nSeqs >= sLength:
             break
+        if size < args.maxWordSize:
+            position += 1
+            continue
         if not position in randList and not computeAll:
             position += 1
             continue
         n      = 0
         handle.write('%d' % label)
         # Obtain Reverse complementary strand
-        seqC = seq[::-1]
-        seqC = seqC.replace('A','3').replace('C','4').replace('G','C').replace('T','A').replace('3','T').replace('4','G')
+        ###TODO Decide if complementary strand kmers are needed ###
+        #seqC = seq[::-1]
+        #seqC = seqC.replace('A','3').replace('C','4').replace('G','C').replace('T','A').replace('3','T').replace('4','G')
         # For each kmer value
         for i in xrange(kMin, kMax + 1):
             kCounts  = counts[i]
             # For word in the sequence
             for j in xrange(size - i + 1):
                 word  = seq[j:j + i]
-                wordC = seqC[j:j + i]
+                #wordC = seqC[j:j + i]
                 kMap  = maps[i - kMin]
                 idx   = kMap.get(word,None)
-                idxC  = kMap.get(wordC,None)
-                if idx is None or idxC is None:
+                #idxC  = kMap.get(wordC,None)
+                #if idx is None or idxC is None:
+                if idx is None:
                     continue
                 kCounts[idx]  += 1
-                kCounts[idxC] += 1
+                #kCounts[idxC] += 1
             kCountsSum = sum(kCounts)
             for j in xrange(len(kCounts)):
                 kCounts[j] /= kCountsSum
@@ -960,8 +981,15 @@ def writeOutput(args, predictions, blastClassification, fastaPath, fastaName, pr
     blastDict   = blastClassification
     hostResults = prefix1 + '_' + fastaName
     symbResults = prefix2 + '_' + fastaName
-    hostHandle  = open(hostResults, "w")
-    symbHandle  = open(symbResults, "w")
+    if args.outDir:
+        outFolder = os.path.abspath(args.outDir)
+        if not os.path.isdir(outFolder):
+            os.makedirs(outFolder)
+        hostHandle  = open(os.path.join(outFolder,hostResults), "w")
+        symbHandle  = open(os.path.join(outFolder,symbResults), "w")
+    else:    
+        hostHandle  = open(hostResults, "w")
+        symbHandle  = open(symbResults, "w")
     j           = 0
     p           = 0
     for name, seq in iterFasta(fastaPath):
@@ -1118,6 +1146,11 @@ def mainArgs():
                         type=int,
                         default='0',
                         help='Maximum number of training & testing sequences')
+    parser.add_argument('-s',
+                        '--minSeqSize',
+                        type=int,
+                        default='0',
+                        help='Minimum sequence size for training & testing sequences')    
     parser.add_argument('-c',
                         '--minWordSize',
                         type=int,
@@ -1137,6 +1170,11 @@ def mainArgs():
                         type=str,
                         default='temp',
                         help='Name of temporary directory')
+    parser.add_argument('-o',
+                        '--outDir',
+                        type=str,
+                        default='',
+                        help='Name of optional output directory')
     parser.add_argument('-X',
                         '--clearTemp',
                         action='store_true',
@@ -1163,7 +1201,7 @@ def main():
     options = PsyTransOptions(args)
     programList = [args.blastType,'svm-train','svm-scale','svm-predict']
     logName = options._getSuffix()
-    logName = logName + '_psytrans.log'
+    logName = logName + '_' +args.tempDir + '_psytrans.log'
     logging.basicConfig(level=logging.DEBUG, format=("%(asctime)s - %(funcName)s - %(message)s"), filename=logName, filemode='w')
     
     console = logging.StreamHandler()
