@@ -1201,7 +1201,10 @@ def main():
     options = PsyTransOptions(args)
     programList = [args.blastType,'svm-train','svm-scale','svm-predict']
     logName = options._getSuffix()
-    logName = logName + '_' +args.tempDir + '_psytrans.log'
+    tempDirName = os.path.basename(args.tempDir)
+    if not os.path.basename(args.tempDir):
+        tempDirName = tempDirName.split('/')[-2]
+    logName = logName + '_' + tempDirName + '_psytrans.log'
     logging.basicConfig(level=logging.DEBUG, format=("%(asctime)s - %(funcName)s - %(message)s"), filename=logName, filemode='w')
     
     console = logging.StreamHandler()
